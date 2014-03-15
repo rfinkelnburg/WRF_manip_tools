@@ -11,4 +11,4 @@ clean:
 	rm -f $(TARGET) $(TARGET).o
 
 IFF_dump:
-	$(CXX) -o IFF_dump IFF_dump.cpp -I../QuickPlot -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot'
+	$(CXX) -o IFF_dump IFF_dump.cpp $(INCLUDE) $(LIBS)

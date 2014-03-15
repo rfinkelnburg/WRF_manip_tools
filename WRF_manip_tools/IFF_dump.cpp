@@ -18,22 +18,22 @@
 using namespace std;
 
 /* converts 4-byte-array into integer (false -> big endian, true -> little endian) */
-int b2i(char b[4], bool little) {
-	if (little) {
-		return (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | (b[0]);
-	} else {
+int b2i(char b[4], bool endian) {
+	if (endian) {
 		return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | (b[3]);
+	} else {
+		return (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | (b[0]);
 	}
 }
 
 /* converts 4-byte-array into float (false -> big endian, true -> little endian) */
-float b2f(char b[4], bool little) {
+float b2f(char b[4], bool endian) {
 	union {
 	        char bytes[4];
 	        float f;
 	} fun1;
 
-	if (little) {
+	if (endian) {
 		fun1.bytes[0] = b[3];
   		fun1.bytes[1] = b[2];
    		fun1.bytes[2] = b[1];
@@ -69,9 +69,10 @@ float** allocate2D(int ncols, int nrows) {
 }
 
 int main(int argc, char** argv) {
+	bool endian = true; /* set this flag to false if you have endian problems */
 	string filename, variable;
 	double level;
-	bool  f_var, f_plot;
+	bool f_var, f_plot;
 
 	/************************************
 	 * Checking/extracting arguments... *
@@ -136,21 +137,21 @@ int main(int argc, char** argv) {
 		/* reading version information */
 		file.read(dummy,4);
 		if (file.eof()) { return EXIT_SUCCESS;} /* exit since EOF */
-		file.read(dummy,4); version = b2i(dummy, false);
+		file.read(dummy,4); version = b2i(dummy, endian);
 		file.read(dummy,4);
 
 		/* reading header information */
 		file.read(dummy,4);
 		file.read(hdate,24);hdate[24] = '\0';
-		file.read(dummy,4); xfcst = b2f(dummy, true);
+		file.read(dummy,4); xfcst = b2f(dummy, endian);
 		file.read(map_source,32); map_source[32] = '\0';
 		file.read(field,9); field[9] = '\0';
 		file.read(units,25); units[25] = '\0';
 		file.read(desc,46); desc[46] = '\0';
-		file.read(dummy,4); xlvl = b2f(dummy, true);
-		file.read(dummy,4); nx = b2i(dummy, false);
-		file.read(dummy,4); ny = b2i(dummy, false);
-		file.read(dummy,4); iproj = b2i(dummy, false);
+		file.read(dummy,4); xlvl = b2f(dummy, endian);
+		file.read(dummy,4); nx = b2i(dummy, endian);
+		file.read(dummy,4); ny = b2i(dummy, endian);
+		file.read(dummy,4); iproj = b2i(dummy, endian);
 		file.read(dummy,4);
 
 		if (f_var) {
@@ -185,11 +186,11 @@ int main(int argc, char** argv) {
 		case 0 : /* Cylindrical equidistant */
 			file.read(dummy,4);
 			file.read(startloc,8); startloc[8] = '\0';
-			file.read(dummy,4); startlat = b2f(dummy, true);
-			file.read(dummy,4); startlon = b2f(dummy, true);
-			file.read(dummy,4); deltalat = b2f(dummy, true);
-			file.read(dummy,4); deltalon = b2f(dummy, true);
-			file.read(dummy,4); earth_radius = b2f(dummy, true);
+			file.read(dummy,4); startlat = b2f(dummy, endian);
+			file.read(dummy,4); startlon = b2f(dummy, endian);
+			file.read(dummy,4); deltalat = b2f(dummy, endian);
+			file.read(dummy,4); deltalon = b2f(dummy, endian);
+			file.read(dummy,4); earth_radius = b2f(dummy, endian);
 			file.read(dummy,4);
 			if (found) {
 				cout << "IPROJ = " << iproj << " (Cylindrical equidistant)" << endl;
@@ -202,12 +203,12 @@ int main(int argc, char** argv) {
 		case 1 : /* Mercator */
 			file.read(dummy,4);
 			file.read(startloc,8); startloc[8] = '\0';
-			file.read(dummy,4); startlat = b2f(dummy, true);
-			file.read(dummy,4); startlon = b2f(dummy, true);
-			file.read(dummy,4); dx = b2f(dummy, true);
-			file.read(dummy,4); dy = b2f(dummy, true);
-			file.read(dummy,4); truelat1 = b2f(dummy, true);
-			file.read(dummy,4); earth_radius = b2f(dummy, true);
+			file.read(dummy,4); startlat = b2f(dummy, endian);
+			file.read(dummy,4); startlon = b2f(dummy, endian);
+			file.read(dummy,4); dx = b2f(dummy, endian);
+			file.read(dummy,4); dy = b2f(dummy, endian);
+			file.read(dummy,4); truelat1 = b2f(dummy, endian);
+			file.read(dummy,4); earth_radius = b2f(dummy, endian);
 			file.read(dummy,4);
 			if (found) {
 				cout << "IPROJ = " << iproj << " (Mercator)" << endl;
@@ -221,14 +222,14 @@ int main(int argc, char** argv) {
 		case 3 : /* Lambert conformal */
 			file.read(dummy,4);
 			file.read(startloc,8); startloc[8] = '\0';
-			file.read(dummy,4); startlat = b2f(dummy, true);
-			file.read(dummy,4); startlon = b2f(dummy, true);
-			file.read(dummy,4); dx = b2f(dummy, true);
-			file.read(dummy,4); dy = b2f(dummy, true);
-			file.read(dummy,4); xlonc = b2f(dummy, true);
-			file.read(dummy,4); truelat1 = b2f(dummy, true);
-			file.read(dummy,4); truelat2 = b2f(dummy, true);
-			file.read(dummy,4); earth_radius = b2f(dummy, true);
+			file.read(dummy,4); startlat = b2f(dummy, endian);
+			file.read(dummy,4); startlon = b2f(dummy, endian);
+			file.read(dummy,4); dx = b2f(dummy, endian);
+			file.read(dummy,4); dy = b2f(dummy, endian);
+			file.read(dummy,4); xlonc = b2f(dummy, endian);
+			file.read(dummy,4); truelat1 = b2f(dummy, endian);
+			file.read(dummy,4); truelat2 = b2f(dummy, endian);
+			file.read(dummy,4); earth_radius = b2f(dummy, endian);
 			file.read(dummy,4);
 			if (found) {
 				cout << "IPROJ = " << iproj << " (Lambert conformal)" << endl;
@@ -243,11 +244,11 @@ int main(int argc, char** argv) {
 		case 4 : /* Gaussian */
 			file.read(dummy,4);
 			file.read(startloc,8); startloc[8] = '\0';
-			file.read(dummy,4); startlat = b2f(dummy, true);
-			file.read(dummy,4); startlon = b2f(dummy, true);
-			file.read(dummy,4); nlats = b2i(dummy, false);
-			file.read(dummy,4); deltalon = b2f(dummy, true);
-			file.read(dummy,4); earth_radius = b2f(dummy, true);
+			file.read(dummy,4); startlat = b2f(dummy, endian);
+			file.read(dummy,4); startlon = b2f(dummy, endian);
+			file.read(dummy,4); nlats = b2i(dummy, endian);
+			file.read(dummy,4); deltalon = b2f(dummy, endian);
+			file.read(dummy,4); earth_radius = b2f(dummy, endian);
 			file.read(dummy,4);
 			if (found) {
 				cout << "IPROJ = " << iproj << " (Gaussian)" << endl;
@@ -261,13 +262,13 @@ int main(int argc, char** argv) {
 		case 5 : /* Polar stereographic */
 			file.read(dummy,4);
 			file.read(startloc,8); startloc[8] = '\0';
-			file.read(dummy,4); startlat = b2f(dummy, true);
-			file.read(dummy,4); startlon = b2f(dummy, true);
-			file.read(dummy,4); dx = b2f(dummy, true);
-			file.read(dummy,4); dy = b2f(dummy, true);
-			file.read(dummy,4); xlonc = b2f(dummy, true);
-			file.read(dummy,4); truelat1 = b2f(dummy, true);
-			file.read(dummy,4); earth_radius = b2f(dummy, true);
+			file.read(dummy,4); startlat = b2f(dummy, endian);
+			file.read(dummy,4); startlon = b2f(dummy, endian);
+			file.read(dummy,4); dx = b2f(dummy, endian);
+			file.read(dummy,4); dy = b2f(dummy, endian);
+			file.read(dummy,4); xlonc = b2f(dummy, endian);
+			file.read(dummy,4); truelat1 = b2f(dummy, endian);
+			file.read(dummy,4); earth_radius = b2f(dummy, endian);
 			file.read(dummy,4);
 			if (found) {
 				cout << "IPROJ = " << iproj << " (Polar stereographic)" << endl;
@@ -295,7 +296,7 @@ int main(int argc, char** argv) {
 		file.read(dummy,4);
 		for (int j=0; j<ny; j++) {
 			for (int i=0; i<nx; i++) {
-				file.read(dummy,4); data[i][j] = b2f(dummy, true);
+				file.read(dummy,4); data[i][j] = b2f(dummy, endian);
 			}
 		}
 		file.read(dummy,4);

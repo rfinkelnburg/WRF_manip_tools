@@ -12,6 +12,7 @@
 #include <qwt_matrix_raster_data.h>
 #include <qwt_plot_spectrogram.h>
 #include <qwt_color_map.h>
+#include <qwt_scale_widget.h>
 
 /* setting color map */
 class ColorMap: public QwtLinearColorMap
@@ -20,13 +21,11 @@ public:
     ColorMap():
         QwtLinearColorMap( Qt::darkCyan, Qt::red )
     {
-        addColorStop( 0.1, Qt::cyan );
-        addColorStop( 0.6, Qt::green );
-        addColorStop( 0.95, Qt::yellow );
+        addColorStop( 0.25, Qt::cyan );
+        addColorStop( 0.45, Qt::green );
+        addColorStop( 0.77, Qt::yellow );
     }
 };
-
-//TODO: Add color table to right y-axis
 
 /* plot 2D float array */
 void QuickPlot(int nx, int ny, float **data)
@@ -75,16 +74,24 @@ void QuickPlot(int nx, int ny, float **data)
 	plot->setTitle("Quick Plot");
 	plot->setAxisScale(QwtPlot::xBottom, 0, nx);
 	plot->setAxisScale(QwtPlot::yLeft, 0, ny);
-	plot->enableAxis(QwtPlot::yRight);
+	/* set color bar to the right y-axis */	
+	QwtScaleWidget *m_rightAxis;
+	m_rightAxis = plot->axisWidget(QwtPlot::yRight);
+	m_rightAxis->setColorBarEnabled(true);
+	QwtInterval interval = QwtInterval(min_val, max_val, 0x00);
+	m_rightAxis->setColorMap(interval, new ColorMap());
 	plot->setAxisScale(QwtPlot::yRight, min_val, max_val);
-	/* scale axis */
+	plot->setAxisTitle(QwtPlot::yRight, "Intensity");
+	plot->enableAxis(QwtPlot::yRight);
+
+	/* scale plot window */
 	if (nx > ny) { yfac = float(ny)/float(nx);}
 	if (ny > nx) { xfac = float(nx)/float(ny);}
 	plot->setFixedWidth(max_plot_dim*xfac+50);
 	plot->setFixedHeight(max_plot_dim*yfac);
 	/* setup spectrogram */
 	QwtPlotSpectrogram *spectrogram = new QwtPlotSpectrogram();
-	spectrogram->setColorMap( new ColorMap() );
+	spectrogram->setColorMap( new ColorMap());
 	spectrogram->setData(matrix);
 	spectrogram->attach(plot);
 
