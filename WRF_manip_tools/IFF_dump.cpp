@@ -13,6 +13,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include "QuickPlot.h"
 
 using namespace std;
 
@@ -46,19 +47,19 @@ float b2f(char b[4], bool little) {
 	return fun1.f;
 }
 
-float** allocate2D(int nrows, int ncols) {
+float** allocate2D(int ncols, int nrows) {
   int i;
   float **dat2;
   /*  allocate array of pointers  */
-  dat2 = (float**)malloc(nrows*sizeof(float*));
+  dat2 = (float**)malloc(ncols*sizeof(float*));
 
   if(dat2==NULL) {
     printf("\nError allocating memory\n");
     exit(1);
   }
   /*  allocate each row  */
-  for(i = 0; i < nrows; i++) {
-    dat2[i] = (float*)malloc( ncols*sizeof(float));
+  for(i = 0; i < ncols; i++) {
+    dat2[i] = (float*)malloc( nrows*sizeof(float));
   }
   if(dat2[i-1]==NULL) {
     printf("\nError allocating memory\n");
@@ -69,6 +70,7 @@ float** allocate2D(int nrows, int ncols) {
 
 int main(int argc, char** argv) {
 	string filename, variable;
+	double level;
 	bool  f_var, f_plot;
 
 	/************************************
@@ -77,7 +79,7 @@ int main(int argc, char** argv) {
 	if (argc < 2 or argc > 4) {
 		puts("COMMAND: IFF_dump <file>");
 		puts("OPIONS:  --variable=<variable> Dump only 'this' variable.");
-		puts("         --plot                Additionally plot data for variable.");
+		puts("         --plot=<level>        Additionally plot data for variable at pressure level.");
 		return EXIT_FAILURE;
 	} else {
 		filename = string(argv[1]); /* extract filename */
@@ -93,11 +95,13 @@ int main(int argc, char** argv) {
 			}
 		}
 		if (argc == 4) {
-			if (string(argv[3]).compare(0,strlen("--plot"),"--plot")) {
-				puts("Third argument unknown (should be --plot)");
+			if (string(argv[3]).compare(0,strlen("--plot="),"--plot=")) {
+				puts("Third argument unknown (should be --plot=<level>)");
 				return EXIT_FAILURE;
 			} else
 			{
+				/* pressure level to be plotted*/
+				level = atof(((string(argv[3])).substr(strlen("--plot="),strlen(argv[3])-strlen("--plot="))).c_str());
 				f_plot = true;
 			}
 		}
@@ -157,6 +161,9 @@ int main(int argc, char** argv) {
 			if ((strncmp(variable.c_str(), field, f_size) == 0) and
 			    (int(variable.length()) == f_size)) {
 				found = true;
+			}
+			if (f_plot and level != xlvl) {
+				found = false;
 			}
 		} else {
 			found = true;
@@ -286,8 +293,8 @@ int main(int argc, char** argv) {
 		/* reading data */
 		data = allocate2D(nx, ny);
 		file.read(dummy,4);
-		for (int i=0; i<nx; i++) {
-			for (int j=0; j<ny; j++) {
+		for (int j=0; j<ny; j++) {
+			for (int i=0; i<nx; i++) {
 				file.read(dummy,4); data[i][j] = b2f(dummy, true);
 			}
 		}
@@ -296,9 +303,8 @@ int main(int argc, char** argv) {
 		/* output first data element */
 		if (found) {
 			cout << "DATA(1,1) = " << data[0][0] << endl;
-			if (f_plot) { /* plot data */
-				//TODO: implement plot method...
-				cout << "PLOT DATA ...\n";
+			if (f_plot and level == xlvl) { /* plot if requested */
+				QuickPlot(nx, ny, data);
 			}
 		}
 
