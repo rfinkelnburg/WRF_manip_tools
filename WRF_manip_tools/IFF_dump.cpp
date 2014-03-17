@@ -14,62 +14,12 @@
 #include <iostream>
 #include <fstream>
 #include "QuickPlot.h"
+#include "utils.h"
 
 using namespace std;
 
-/* converts 4-byte-array into integer (false -> big endian, true -> little endian) */
-int b2i(char b[4], bool endian) {
-	if (endian) {
-		return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | (b[3]);
-	} else {
-		return (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | (b[0]);
-	}
-}
-
-/* converts 4-byte-array into float (false -> big endian, true -> little endian) */
-float b2f(char b[4], bool endian) {
-	union {
-	        char bytes[4];
-	        float f;
-	} fun1;
-
-	if (endian) {
-		fun1.bytes[0] = b[3];
-  		fun1.bytes[1] = b[2];
-   		fun1.bytes[2] = b[1];
-   		fun1.bytes[3] = b[0];
-	} else {
-		fun1.bytes[0] = b[0];
-  		fun1.bytes[1] = b[1];
-   		fun1.bytes[2] = b[2];
-   		fun1.bytes[3] = b[3];
-	}
-	return fun1.f;
-}
-
-float** allocate2D(int ncols, int nrows) {
-  int i;
-  float **dat2;
-  /*  allocate array of pointers  */
-  dat2 = (float**)malloc(ncols*sizeof(float*));
-
-  if(dat2==NULL) {
-    printf("\nError allocating memory\n");
-    exit(1);
-  }
-  /*  allocate each row  */
-  for(i = 0; i < ncols; i++) {
-    dat2[i] = (float*)malloc( nrows*sizeof(float));
-  }
-  if(dat2[i-1]==NULL) {
-    printf("\nError allocating memory\n");
-    exit(1);
-  }
-  return dat2;
-}
-
 int main(int argc, char** argv) {
-	bool endian = true; /* set this flag to false if you have endian problems */
+	bool endian = true; /* set this flag handle endian problems */
 	string filename, variable;
 	double level;
 	bool f_var, f_plot;
@@ -127,7 +77,8 @@ int main(int argc, char** argv) {
 	bool found = false;
 	float **data;
 
-	ifstream file(filename.c_str());
+	ifstream file;
+	file.open(filename.c_str(), ios::in);
 	if(!file) { /* test if file opens/exists */
 		cout << "Error opening file: " << filename << '\n';
 		return EXIT_FAILURE;
@@ -136,7 +87,9 @@ int main(int argc, char** argv) {
 	while(!file.eof()) {
 		/* reading version information */
 		file.read(dummy,4);
-		if (file.eof()) { return EXIT_SUCCESS;} /* exit since EOF */
+		if (file.eof()) { /* exit if EOF */
+			break;
+		}
 		file.read(dummy,4); version = b2i(dummy, endian);
 		file.read(dummy,4);
 
@@ -313,5 +266,6 @@ int main(int argc, char** argv) {
 		found = false;
 	}
 
+	file.close();
 	return EXIT_SUCCESS;
 }
