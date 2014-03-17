@@ -4,8 +4,8 @@
  *  Created on: Mar 17, 2014
  *      Author: Roman Finkelnburg
  *   Copyright: Roman Finkelnburg (2014)
- * Description: This tool copies Intermediate Format Files (It's more
- *              a tool for testing if I/O formats are correct.
+ * Description: This tool copies Intermediate Format Files (it's more
+ *              testing if I/O formatting is correct)
  */
 
 #include <stdio.h>
