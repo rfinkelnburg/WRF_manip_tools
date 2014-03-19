@@ -5,7 +5,7 @@
  *      Author: Roman Finkelnburg
  *   Copyright: Roman Finkelnburg (2014)
  * Description: This tool copies Intermediate Format Files (it's more
- *              testing if I/O formatting is correct)
+ *              for testing if I/O formatting is correct)
  */
 
 #include <stdio.h>
@@ -19,13 +19,13 @@
 using namespace std;
 
 int main(int argc, char** argv) {
-	bool endian = true; /* set this flag handle endian problems */
+	bool endian = true; /* play around with this flag to handle endian problems */
 	string ifilename, ofilename;
 	int ok;
 
-	/************************************
-	 * Checking/extracting arguments... *
-	 ************************************/
+	/*********************************
+	 * Checking/extracting arguments *
+	 *********************************/
 	if (argc != 3) {
 		puts("COMMAND: IFF_copy <input file> <output file>");
 		return EXIT_FAILURE;
@@ -35,9 +35,9 @@ int main(int argc, char** argv) {
 	}
 
 
-	/*****************
-	 * Opening files *
-	 *****************/
+	/**************
+	 * Open files *
+	 **************/
 	ifstream ifile;
 	ifile.open(ifilename.c_str(), ios::in | ios::binary);
 	if(!ifile) { /* test if input file opens/exists */
@@ -52,9 +52,9 @@ int main(int argc, char** argv) {
 		return EXIT_FAILURE;
 	}
 
-	/***************************************************************
-	 * Copying Intermediate Format File (unformatted Fortran file) *
-	 ***************************************************************/
+	/************************************
+	 * Copying Intermediate Format File *
+	 ************************************/
 	char dummy[4];
 	struct IFFheader header;
 	struct IFFproj proj;
@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
 			ifile.read(dummy,4);
 			break;
 		default:
-			cout << "Projection unknown!\n";
+			cout << "ABORT: Projection unknown!\n";
 			return EXIT_FAILURE;
 		}
 

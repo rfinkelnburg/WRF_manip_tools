@@ -19,18 +19,18 @@
 using namespace std;
 
 int main(int argc, char** argv) {
-	bool endian = true; /* set this flag handle endian problems */
+	bool endian = true; /* play around with this flag to handle endian problems */
 	string filename, variable;
 	double level;
 	bool f_var, f_plot;
 
-	/************************************
-	 * Checking/extracting arguments... *
-	 ************************************/
+	/*********************************
+	 * Checking/extracting arguments *
+	 *********************************/
 	if (argc < 2 or argc > 4) {
 		puts("COMMAND: IFF_dump <file>");
 		puts("OPIONS:  --variable=<variable> Dump only 'this' variable.");
-		puts("         --plot=<level>        Additionally plot data for variable at pressure level.");
+		puts("         --plot=<level>        Additionally plot data for 'this' variable at pressure level.");
 		return EXIT_FAILURE;
 	} else {
 		filename = string(argv[1]); /* extract filename */
@@ -38,8 +38,7 @@ int main(int argc, char** argv) {
 			if (string(argv[2]).compare(0,strlen("--variable="),"--variable=")) {
 				puts("Second argument unknown (should be --variable=<variable>)");
 				return EXIT_FAILURE;
-			} else
-			{
+			} else {
 				/* extract variable name */
 				variable = (string(argv[2])).substr(strlen("--variable="),strlen(argv[2])-strlen("--variable="));
 				f_var = true;
@@ -49,8 +48,7 @@ int main(int argc, char** argv) {
 			if (string(argv[3]).compare(0,strlen("--plot="),"--plot=")) {
 				puts("Third argument unknown (should be --plot=<level>)");
 				return EXIT_FAILURE;
-			} else
-			{
+			} else {
 				/* pressure level to be plotted*/
 				level = atof(((string(argv[3])).substr(strlen("--plot="),strlen(argv[3])-strlen("--plot="))).c_str());
 				f_plot = true;
