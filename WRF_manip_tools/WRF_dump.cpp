@@ -23,8 +23,6 @@
 
 using namespace std;
 
-#define CHECK(stat,f) if(stat != NC_NOERR) {check(stat,#f,__FILE__,__LINE__);} else {}
-
 string NC_FOMAT[4] = {"NC_FORMAT_CLASSIC",
 					  "NC_FORMAT_64BIT",
 					  "NC_FORMAT_NETCDF4",
@@ -44,6 +42,8 @@ string VAR_TYPE[13] = { "nat",    /* NAT = 'Not A Type' (c.f. NaN) */
 						"uint64", /* unsigned 8-byte int */
 						"string"};/* string */
 
+/* check the netcdf error codes */
+#define CHECK(stat,f) if(stat != NC_NOERR) {check(stat,#f,__FILE__,__LINE__);} else {}
 void check(int err, const char* fcn, const char* file, const int line) {
     fprintf(stderr,"%s\n",nc_strerror(err));
     fprintf(stderr,"Location: function %s; file %s; line %d\n",
@@ -52,6 +52,7 @@ void check(int err, const char* fcn, const char* file, const int line) {
     exit(1);
 }
 
+/* print help text */
 void print_help(void) {
 	puts("COMMAND: WRF_dump <WRF output file>");
 	puts("OPIONS:  --variable=<variable> Dump only 'this' variable.");
@@ -59,6 +60,8 @@ void print_help(void) {
 	puts("         --time=<step num>     Additionally output option required for 3D and 4D variables");
 	puts("         --slice=<level num>   Additionally output option required for 4D variables");
 }
+
+/* dump dimension information */
 void dump_dimensions(int igrp) {
 	int stat = NC_NOERR;
 	int ndims, dimid, nunlims;
@@ -107,6 +110,8 @@ void dump_dimensions(int igrp) {
 		}
 	}
 }
+
+/* dump attributes of selected variable */
 void dump_attributes(int igrp, int varid, int natts, char *vname) {
 	int stat = NC_NOERR;
 	int attid, atype, ok;
@@ -175,6 +180,7 @@ void dump_attributes(int igrp, int varid, int natts, char *vname) {
 	}
 }
 
+/* dump all global attributes */
 void dump_global_atts(int igrp) {
 	int stat = NC_NOERR;
 	int natts;
@@ -184,6 +190,7 @@ void dump_global_atts(int igrp) {
     dump_attributes(igrp, NC_GLOBAL, natts, (char*)&"NC_GLOBAL");
 }
 
+/* dump information of selected variable */
 void dump_variable(int igrp, int varid) {
 	int stat = NC_NOERR;
 	int ndims, dimid, vtype, natts;
@@ -209,6 +216,7 @@ void dump_variable(int igrp, int varid) {
    	dump_attributes(igrp, varid, natts, vname);
 }
 
+/* dump information of all variables */
 void dump_variables(int igrp) {
 	int stat = NC_NOERR;
 	int nvars, varid;
@@ -219,9 +227,11 @@ void dump_variables(int igrp) {
 
 }
 
+/* read data of selected variable */
 void read_var(int igrp, int varid, int inkind, int vartype, size_t *start, size_t *count, void *buf) {
 	int stat = NC_NOERR;
 
+	/* read data of selected variable */
 	if (inkind == NC_FORMAT_NETCDF4) {
 		stat = nc_get_vara(igrp, varid, start, count, buf);
 		CHECK(stat, nc_get_vara);
@@ -257,12 +267,14 @@ void read_var(int igrp, int varid, int inkind, int vartype, size_t *start, size_
 	}
 }
 
+/* dump variable information and print/plot data if selected */
 void dump_this_variable(int igrp, int inkind, string variable, int outopt, int step, int level, int argc) {
 	int stat = NC_NOERR;
 	int nvars, varid, ndims;
 	char vname[NC_MAX_NAME];
 	bool found = false;
 
+	/* check if selected variable exists */
 	stat = nc_inq_nvars(igrp, &nvars);
     CHECK(stat, nc_inq_nvars);
 	printf("variables:\n");
@@ -275,12 +287,16 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
        	}
     }
 
+    /* dump variable information if found */
     if (found) dump_variable(igrp, varid);
     else {
     	printf("ABORT: Variable %s not found!\n", variable.c_str());
     	exit (EXIT_FAILURE);
     }
 
+	/*******************
+	 * print/plot data *
+	 *******************/
     if (outopt) {
     	char dname[NC_MAX_NAME];
     	int dimids[ndims];
@@ -328,8 +344,11 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
     	stat = nc_inq_type(igrp, vtype, NULL, &value_size);
     	CHECK(stat, nc_inq_type);
 
+    	/*************************************
+    	 * set slicing and allocation limits *
+    	 *************************************/
     	switch (ndims) {
-		case 1: /* 1D output */
+		case 1: /* 1D data */
 			if (argc == 4) count = dimlens[0];
 	    	if (argc == 5) {
 				count = 1;
@@ -341,7 +360,7 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
 	    		exit (EXIT_FAILURE);
 	    	}
 			break;
-		case 2: /* 2D output */
+		case 2: /* 2D data*/
 			if (argc == 4) count = dimlens[0] * dimlens[1];
 			if (argc == 5) {
 				count = dimlens[1];
@@ -358,7 +377,7 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
 			nx = int(dimlens[1]);
 			ny = int(dimlens[0]);
 	    	break;
-		case 3: /* 3D output */
+		case 3: /* 3D data */
 			if (argc == 4) count = dimlens[0] * dimlens[1] * dimlens[2];
 	    	if (argc == 5) {
 				count = dimlens[1] * dimlens[2];
@@ -375,7 +394,7 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
 			nx = int(dimlens[2]);
 			ny = int(dimlens[1]);
 	    	break;
-		case 4: /* 4D output */
+		case 4: /* 4D data */
 			if (argc == 4) count = dimlens[0] * dimlens[1] * dimlens[2] * dimlens[3];
 	    	if (argc == 5) {
 				count = dimlens[1] * dimlens[2] * dimlens[3];
@@ -397,6 +416,7 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
 			exit(EXIT_FAILURE);
 		}
 
+    	/* prepare data structure */
     	union {
     		char *c;
     		short int *s;
@@ -405,10 +425,12 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
     		double *d;
     		void *v;
     	} buf;
-
     	buf.v = malloc(value_size * count);
+
+    	/* read data */
     	read_var(igrp, varid, inkind, vtype, start, dimlens, buf.v);
 
+    	/* plot data */
     	if (outopt == 2) {
     		float **data = allocate2D(nx, ny);
     		for (long j=0; j<ny; j++) {
@@ -416,15 +438,16 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
     				data[i][j] = buf.f[i+j*nx];
     			}
     		}
-
     		QuickPlot(nx, ny, data);
         	free(data);
     	}
 
+    	/* print data */
     	if (outopt == 1) {
     		printf("has to be implemented!\n");
     	}
 
+    	/* free allocated memory */
     	free(buf.v);
     }
 
@@ -463,6 +486,7 @@ int main(int argc, char** argv) {
 				print_help();
 				return EXIT_FAILURE;
 			} else {
+				/* output option */
 				outopt = atoi(((string(argv[3])).substr(strlen("--output="),strlen(argv[3])-strlen("--output="))).c_str());
 			}
 		}
@@ -472,6 +496,7 @@ int main(int argc, char** argv) {
 				print_help();
 				return EXIT_FAILURE;
 			} else {
+				/* extract time option */
 				step = atoi(((string(argv[4])).substr(strlen("--time="),strlen(argv[4])-strlen("--time="))).c_str());
 			}
 		}
@@ -481,21 +506,21 @@ int main(int argc, char** argv) {
 				print_help();
 				return EXIT_FAILURE;
 			} else {
-				/* pressure level to be plotted*/
+				/* extract level option */
 				level = atoi(((string(argv[5])).substr(strlen("--slice="),strlen(argv[5])-strlen("--slice="))).c_str());
 			}
 		}
 	}
 
-	/**********************
-	 * Open and read file *
-	 **********************/
+	/*************
+	 * Open file *
+	 *************/
     stat = nc_open(ifilename.c_str(),NC_NOWRITE,&igrp);
 	CHECK(stat,nc_open);
 
-	/*************************
-	 * getting netcdf format *
-	 *************************/
+	/*********************
+	 * get netcdf format *
+	 *********************/
 	stat = nc_inq_format(igrp, &inkind);
 	CHECK(stat,nc_inq_format);
 	printf("format:\n");
@@ -515,9 +540,9 @@ int main(int argc, char** argv) {
      ******************************/
 	dump_dimensions(igrp);
 
-    /*****************************
-     * dump variable information *
-     *****************************/
+    /**********************************
+     * dump variable information/data *
+     **********************************/
 	if (f_var) dump_this_variable(igrp, inkind, variable, outopt, step, level, argc);
 	else dump_variables(igrp);
 
@@ -526,16 +551,9 @@ int main(int argc, char** argv) {
      **************************/
     if (!f_var) dump_global_atts(igrp);
 
-    /**********************
-     * plot variable data *
-     **********************/
-
-    //TODO: display data (use plot method of IFF_dump)
-    //      2D needs --variable -> Timeline()
-    //      3D needs --variable --timestep -> QuickPlot()
-    //		4D needs --variable --timestep --eta -> QuickPlot()
-
-
+    /***************
+     *  close file *
+     ***************/
 	stat = nc_close(igrp);
 	return EXIT_SUCCESS;
 }
