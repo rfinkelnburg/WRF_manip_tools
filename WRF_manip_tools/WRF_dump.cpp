@@ -42,8 +42,16 @@ string VAR_TYPE[13] = { "nat",    /* NAT = 'Not A Type' (c.f. NaN) */
 						"uint64", /* unsigned 8-byte int */
 						"string"};/* string */
 
+union buf{
+	char *c;
+	short int *s;
+	int *i;
+	float *f;
+	double *d;
+	void *v;
+};
+
 /* check the netcdf error codes */
-#define CHECK(stat,f) if(stat != NC_NOERR) {check(stat,#f,__FILE__,__LINE__);} else {}
 void check(int err, const char* fcn, const char* file, const int line) {
     fprintf(stderr,"%s\n",nc_strerror(err));
     fprintf(stderr,"Location: function %s; file %s; line %d\n",
@@ -51,14 +59,15 @@ void check(int err, const char* fcn, const char* file, const int line) {
     fflush(stderr); fflush(stdout);
     exit(1);
 }
+#define CHECK(stat,f) if(stat != NC_NOERR) {check(stat,#f,__FILE__,__LINE__);} else {}
 
 /* print help text */
 void print_help(void) {
 	puts("COMMAND: WRF_dump <WRF output file>");
 	puts("OPIONS:  --variable=<variable> Dump only 'this' variable.");
 	puts("         --output=<opt>        Additionally output data for 'this' variable (1: print, 2: plot).");
-	puts("         --time=<step num>     Additionally output option required for 3D and 4D variables");
-	puts("         --slice=<level num>   Additionally output option required for 4D variables");
+	puts("         --time=<step num>     Additionally output option required for 3D and 4D variables (first dim slicing)");
+	puts("         --slice=<level num>   Additionally output option required for 4D variables (second dim slicing)");
 }
 
 /* dump dimension information */
@@ -267,6 +276,43 @@ void read_var(int igrp, int varid, int inkind, int vartype, size_t *start, size_
 	}
 }
 
+/* print sliced data of 'this' variable */
+void print_data(union buf* buf, size_t count[], int dim, int ndims, long offset, int vtype) {
+	for (int j=0; j<dim-1; j++) {printf(" ");}
+	printf("[");
+	for (long i=0; i<count[dim-1]; i++) {
+		if (dim < ndims) {
+			printf("\n");
+			long offsetcur = count[dim];
+			print_data(buf, count, dim+1, ndims, offset+offsetcur*i, vtype);
+		} else {
+				switch (vtype) {
+				case NC_CHAR:
+					printf("%c", buf->c[i+offset]);
+					break;
+				case NC_SHORT:
+					printf("%i", buf->s[i+offset]);
+					break;
+				case NC_INT:
+					printf("%i", buf->i[i+offset]);
+					break;
+				case NC_FLOAT:
+					printf("%f", buf->f[i+offset]);
+					break;
+				case NC_DOUBLE:
+					printf("%f", buf->d[i+offset]);
+					break;
+				default:
+					printf("ABORT: variable type %s not implemented!\n",
+							VAR_TYPE[vtype].c_str());
+					exit(EXIT_FAILURE);
+				}
+				if (i<count[dim-1]-1) printf(", ", dim);
+		}
+	}
+	printf("]");
+}
+
 /* dump variable information and print/plot data if selected */
 void dump_this_variable(int igrp, int inkind, string variable, int outopt, int step, int level, int argc) {
 	int stat = NC_NOERR;
@@ -417,14 +463,7 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
 		}
 
     	/* prepare data structure */
-    	union {
-    		char *c;
-    		short int *s;
-    		int *i;
-    		float *f;
-    		double *d;
-    		void *v;
-    	} buf;
+    	union buf buf;
     	buf.v = malloc(value_size * count);
 
     	/* read data */
@@ -444,7 +483,8 @@ void dump_this_variable(int igrp, int inkind, string variable, int outopt, int s
 
     	/* print data */
     	if (outopt == 1) {
-    		printf("has to be implemented!\n");
+    		print_data(&buf, dimlens, 1, ndims, 0, vtype);
+    		printf("\n");
     	}
 
     	/* free allocated memory */
