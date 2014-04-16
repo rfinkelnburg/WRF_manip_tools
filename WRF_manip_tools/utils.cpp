@@ -9,7 +9,9 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <algorithm>
 #include "utils.h"
+#include "QuickPlot.h"
 
 /* converts 4 Byte array into integer */
 int b2i(char b[4], bool endian) {
@@ -119,6 +121,10 @@ float** allocate2D(int ncols, int nrows) {
   return dat2;
 }
 
+/***********************
+ * IFF write proceture *
+ ***********************/
+
 /* writes data set into Intermediate Format Files */
 int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFproj proj, int is_wind_grid_rel, float **data) {
 	char dummy[4];
@@ -224,4 +230,746 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 	i2b(cnt, dummy, endian); ofile->write(dummy,4); // data block end
 
 	return EXIT_SUCCESS;
+}
+
+/*************************
+ * WRF netcdf file class *
+ *************************/
+
+/* dumps info if netcdf error */
+void WRFcheck(int err, const char* fcn, const char* file, const int line) {
+    fprintf(stderr,"%s\n",nc_strerror(err));
+    fprintf(stderr,"Location: function %s; file %s; line %d\n",
+	    fcn,file,line);
+    fflush(stderr); fflush(stdout);
+    exit(1);
+}
+
+/* macro checks netcdf error code */
+#define WRFCHECK(stat,f) if(stat != NC_NOERR) {WRFcheck(stat,#f,__FILE__,__LINE__);} else {}
+
+/* constructor of WRFncdf class */
+WRFncdf::WRFncdf(string f) {
+	size_t len;
+	char dname[NC_MAX_NAME];
+	this->filename = f;
+	int inparid;
+
+	/*************
+	 * open file *
+	 *************/
+	this->stat = nc_open(filename.c_str(),NC_NOWRITE,&this->igrp);
+	WRFCHECK(this->stat, nc_open);
+
+	/**************************
+	 * check for multi-groups *
+	 **************************/
+	this->stat = nc_inq_grp_parent(this->igrp, &inparid);
+    if(this->stat != NC_ENOGRP) {
+        	printf("ABORT: WRF file format not recognized!\n");
+        	exit(1);
+    }
+
+	/*********************
+	 * get netcdf format *
+	 *********************/
+	this->stat = nc_inq_format(this->igrp, &this->inkind);
+	WRFCHECK(this->stat,nc_inq_format);
+
+	/***********************
+	 * get dimension infos *
+	 ***********************/
+	/* get number of dims */
+	this->stat = nc_inq_ndims(this->igrp, &this->dims);
+    WRFCHECK(this->stat, nc_inq_ndims);
+
+	/* get dim id's */
+    this->dimids = (int *)malloc(this->dims*sizeof(int));
+    this->stat = nc_inq_dimids(this->igrp, NULL, this->dimids, 0);
+    WRFCHECK(this->stat, nc_inq_dimids);
+
+	/* get number of unlimited dims */
+	this->stat = nc_inq_unlimdims(this->igrp, &this->nunlims, NULL);
+	WRFCHECK(this->stat, nc_inq_unlimdims);
+
+	/* get id's of unlimited dims */
+	this->unlimids = (int *)malloc(this->nunlims*sizeof(int));
+	this->stat = nc_inq_unlimdims(this->igrp, &this->nunlims, this->unlimids);
+	WRFCHECK(this->stat, nc_inq_unlimdims);
+
+	/* get dim names and length */
+	this->dimlength = (size_t *)malloc(this->dims*sizeof(size_t));
+	for (int dimid = 0; dimid < this->dims; dimid++) {
+		this->stat = nc_inq_dim(this->igrp, this->dimids[dimid], dname, &len);
+		WRFCHECK(this->stat, nc_inq_dim);
+		this->dimlength[dimid] = len;
+		this->dimnames.push_back(dname);
+	}
+
+	/**********************
+	 * get variable infos *
+	 **********************/
+	/* get number of variables */
+    this->stat = nc_inq_nvars(this->igrp, &this->vars);
+    WRFCHECK(this->stat, nc_inq_nvars);
+
+    /* get variable dims, names and type */
+    this->vartypes = (nc_type *)malloc(this->vars*sizeof(nc_type));
+	char vname[NC_MAX_NAME];
+	for (int varid = 0; varid < this->vars; varid++) {
+	   	this->stat = nc_inq_var(this->igrp, varid, vname, &this->vartypes[varid], NULL, NULL, NULL);
+		WRFCHECK(this->stat, nc_inq_var);
+		this->varnames.push_back(vname);
+	}
+}
+
+/* destructor of WRFncdf class */
+WRFncdf::~WRFncdf (void) {
+	/* close file */
+	this->stat = nc_close(this->igrp);
+}
+
+/* returns format id of current netcdf file */
+int WRFncdf::getformatid(void) {
+	return this->inkind;
+}
+
+/* returns format of current netcdf file as string */
+string WRFncdf::getformatstr(void) {
+	string NC_FORMAT[4] = {"NC_FORMAT_CLASSIC",
+						  "NC_FORMAT_64BIT",
+						  "NC_FORMAT_NETCDF4",
+						  "NC_FORMAT_NETCDF4_CLASSIC"};
+
+	return NC_FORMAT[this->inkind-1];
+}
+
+/* returns current filename */
+string WRFncdf::getname(void) {
+	return this->filename;
+}
+
+/* returns current ncerror code */
+int WRFncdf::getstat(void) {
+	return this->stat;
+}
+
+/* returns number of dims */
+int WRFncdf::ndims(void) {
+	return this->dims;
+}
+
+/* returns number of vars */
+int WRFncdf::nvars(void) {
+	return this->vars;
+}
+
+/* returns number of attributes */
+int WRFncdf::natts(int varid) {
+	int natts;
+   	this->stat = nc_inq_var(this->igrp, varid, NULL, NULL, NULL, NULL, &natts);
+   	WRFCHECK(this->stat, nc_inq_var);
+	return natts;
+}
+
+int WRFncdf::natts(string vname) {
+	return this->natts(this->varid(vname));
+}
+
+/* returns number of global attributes */
+int WRFncdf::ngatts(void) {
+	int natts;
+	this->stat = nc_inq_natts(this->igrp, &natts);
+   	WRFCHECK(this->stat, nc_inq_natts);
+	return natts;
+}
+
+/* returns dim id of dim name */
+int WRFncdf::dimid(string dname) {
+	vector <string>::iterator it;
+	it = find(this->dimnames.begin(), this->dimnames.end(), dname);
+	return int(it - this->dimnames.begin());
+}
+
+/* returns var id of var name */
+int WRFncdf::varid(string vname) {
+	vector <string>::iterator it;
+	it = find(this->varnames.begin(), this->varnames.end(), vname);
+	return int(it - this->varnames.begin());
+}
+
+/* checks if var name exists or not */
+bool WRFncdf::varexist(string vname) {
+	if (this->varid(vname) < this->nvars()) return true;
+	else return false;
+}
+
+/* returns dim name of dim id */
+string WRFncdf::dimname(int dimid) {
+	return this->dimnames[dimid];
+}
+
+/* returns var name of var id */
+string WRFncdf::varname(int varid) {
+	return this->varnames[varid];
+}
+
+/* returns att name of var id and att id */
+string WRFncdf::attname(int varid, int attid) {
+	char aname[NC_MAX_NAME];
+	this->stat = nc_inq_attname(this->igrp, varid, attid, aname); // get name
+	WRFCHECK(this->stat, nc_inq_attname);
+	return string(aname);
+}
+
+string WRFncdf::attname(string vname, int attid) {
+	return this->attname(this->varid(vname), attid);
+}
+
+/* returns global att name of att id */
+string WRFncdf::gattname(int attid) {
+	return this->attname(-1, attid);
+}
+
+/* returns att type */
+int WRFncdf::atttype(int varid, int attid) {
+	int atype;
+	this->stat = nc_inq_atttype(this->igrp, varid, this->attname(varid, attid).c_str(), &atype); // get type
+	WRFCHECK(this->stat, nc_inq_atttype);
+	return atype;
+}
+
+/* returns global att type */
+int WRFncdf::gatttype(int attid) {
+	return this->atttype(-1, attid);
+}
+
+/* returns att value as union */
+WRFattval WRFncdf::attval(int varid, int attid) {
+	WRFattval val;
+
+	switch (this->atttype(varid, attid)) {
+	case 2: /* ISO/ASCII character */
+		printf("ABORT: Please use attvalstr() for string attributes!'n");
+		exit(EXIT_FAILURE);
+		break;
+	case 3: /* signed 2 byte integer */
+		this->stat = nc_get_att_int(this->igrp, varid, this->attname(varid, attid).c_str(), &val.i);
+		WRFCHECK(this->stat, nc_get_att_int);
+		break;
+	case 4: /* signed 4 byte integer */
+		this->stat = nc_get_att_long(this->igrp, varid, this->attname(varid, attid).c_str(), &val.l);
+		WRFCHECK(this->stat, nc_get_att_long);
+		break;
+	case 5: /* single precision floating point number */
+		this->stat = nc_get_att_float(this->igrp, varid, this->attname(varid, attid).c_str(), &val.f);
+		WRFCHECK(this->stat, nc_get_att_float);
+		break;
+	case 6: /* double precision floating point number */
+		this->stat = nc_get_att_double(this->igrp, varid, this->attname(varid, attid).c_str(), &val.d);
+		WRFCHECK(this->stat, nc_get_att_double);
+		break;
+	case 11: /* signed 8-byte int */
+		this->stat = nc_get_att_longlong(this->igrp, varid, this->attname(varid, attid).c_str(), &val.ll);
+		WRFCHECK(stat, nc_get_att_longlong);
+		break;
+	default:
+		printf("ABORT: Attribute type not implemented!\n");
+		exit(EXIT_FAILURE);
+	}
+
+	return val;
+}
+
+/* returns gloabal att value as union */
+WRFattval WRFncdf::gattval(int attid) {
+	return this->attval(-1,attid);
+}
+
+/* returns value of a variable attribute as string
+ * INPUT:	varid	variable id
+ * 			attid	attribute id
+ */
+string WRFncdf::attvalstr(int varid, int attid) {
+	char strval[NC_MAX_NAME];
+	int ok;
+
+	for (int i = 0; i < NC_MAX_NAME; i++) strval[i] = '\0'; // init string
+
+	switch (this->atttype(varid, attid)) {
+	case 2: /* ISO/ASCII character */
+		this->stat = nc_get_att_text(this->igrp, varid, this->attname(varid, attid).c_str(), strval);
+		WRFCHECK(this->stat, nc_get_att_text);
+		break;
+	case 3: /* signed 2 byte integer */
+		ok = sprintf (strval, "%i", this->attval(varid, attid).i);
+		break;
+	case 4: /* signed 4 byte integer */
+		ok = sprintf (strval, "%ld", this->attval(varid, attid).l);
+		break;
+	case 5: /* single precision floating point number */
+		ok = sprintf (strval, "%f", this->attval(varid, attid).f);
+		break;
+	case 6: /* double precision floating point number */
+		ok = sprintf (strval, "%g", this->attval(varid, attid).d);
+		break;
+	case 11: /* signed 8-byte int */
+		ok = sprintf (strval, "%lld", this->attval(varid, attid).ll);
+		break;
+	default:
+		printf("ABORT: Attribute type not implemented!\n");
+		exit(EXIT_FAILURE);
+	}
+
+	return string(strval);
+}
+
+/* returns value of a variable attribute as string
+ * INPUT:	vname	variable name
+ * 			attid	attribute id
+ */
+string WRFncdf::attvalstr(string vname, int attid) {
+	return this->attvalstr(this->varid(vname), attid);
+}
+
+/* returns value of an global attribute as string
+ * INPUT:	attid	attribute id
+ */
+string WRFncdf::gattvalstr(int attid) {
+	return this->attvalstr(-1, attid);
+}
+
+/* returns data type id of variable
+ * INPUT:	varid	variable id
+ */
+int WRFncdf::vartype(int varid) {
+	return int(this->vartypes[varid]);
+}
+
+int WRFncdf::vartype(string vname) {
+	return this->vartype(this->varid(vname));
+}
+/* returns data type of variable as string
+ * INPUT:	varid	variable id
+ */
+string WRFncdf::vartypename(int varid) {
+	string VAR_TYPE[13] = { "nat",    /* NAT = 'Not A Type' (c.f. NaN) */
+							"byte",   /* signed 1 byte integer */
+							"char",   /* ISO/ASCII character */
+							"short",  /* signed 2 byte integer */
+							"int",    /* signed 4 byte integer */
+							"float",  /* single precision floating point number */
+							"double", /* double precision floating point number */
+							"ubyte",  /* unsigned 1 byte int */
+							"ushort", /* unsigned 2-byte int */
+							"uint",   /* unsigned 4-byte int */
+							"int64",  /* signed 8-byte int */
+							"uint64", /* unsigned 8-byte int */
+							"string"};/* string */
+
+	return VAR_TYPE[this->vartypes[varid]];
+}
+
+/* returns data type of variable as string
+ * INPUT:	vname	variable name
+ */
+string WRFncdf::vartypename(string vname) {
+	return this->vartypename(this->varid(vname));
+}
+
+/*
+ * returns variable type size
+ * INPUT:	vname	variable name
+ */
+size_t WRFncdf::vartypesize(string vname) {
+	size_t vsize;
+	this->stat = nc_inq_type(this->igrp, this->vartype(this->varid(vname)), NULL, &vsize);
+	WRFCHECK(this->stat, nc_inq_type);
+	return vsize;
+}
+
+
+/* returns number of dimensions used by variable
+ * INPUT:	varid	variable id
+ */
+int WRFncdf::varndims(int varid) {
+	int i;
+	this->stat = nc_inq_varndims(this->igrp, varid, &i);
+	WRFCHECK(this->stat, nc_inq_varndims);
+	return i;
+}
+
+/* returns number of dimensions used by variable
+ * INPUT:	vname	variable name
+ */
+int WRFncdf::varndims(string vname) {
+	return this->varndims(this->varid(vname));
+}
+
+/* returns dimension id's used by variable
+ * INPUT:	varid	variable id
+ */
+size_t *WRFncdf::vardims(int varid) {
+	size_t *dims = (size_t *)malloc(this->varndims(varid)*sizeof(size_t));
+	int vdims[this->varndims(varid)];
+
+	this->stat = nc_inq_var(this->igrp, varid, NULL, NULL, NULL, vdims, NULL);
+   	WRFCHECK(this->stat, nc_inq_var);
+
+	for (int i=0; i<this->varndims(varid); i++) dims[i] = vdims[i];
+
+	return dims;
+}
+
+size_t *WRFncdf::vardims(string vname) {
+	return this->vardims(this->varid(vname));
+}
+
+
+/* returns dimension name used by variable
+ * INPUT: 	varid	variable id
+ * 			dimid	dimension id
+ */
+string WRFncdf::vardimname(int varid, int dimid) {
+	return this->dimname((this->vardims(varid)[dimid]));
+}
+
+/* returns dimension name used by variable
+ * INPUT: 	vname	variable name
+ * 			dimid	dimension id
+ */
+string WRFncdf::vardimname(string vname, int dimid) {
+	return this->vardimname(this->varid(vname), dimid);
+}
+
+/* returns dimension name used by variable
+ * INPUT: 	vname	variable name
+ * 			dname	dimension name
+ */
+string WRFncdf::vardimname(string vname, string dname) {
+	return this->vardimname(vname, this->dimid(dname));
+}
+
+/*
+ * returns count of variable elements
+ * INPUT:	vname	variable name
+ */
+size_t WRFncdf::varcount(string vname) {
+	size_t ndims = this->varndims(vname);
+	size_t *dims = this->vardims(vname);
+	size_t count = 1;
+	for (int i = 0; i < ndims; i++) count *= this->dimlen(dims[i]);
+
+	return count;
+}
+
+/*
+ * returns variable data
+ * INPUT:	vname	variable name
+ *			start[] start index array for slicing
+ *			stop[]  stop count array for slicing
+ * OUTPUT:	type	variable type identifier
+ * 			dims	array of dimension length
+ */
+void* WRFncdf::vardata(string vname,  int *type, int *ndims, size_t *start, size_t *stop) {
+	void *data;
+
+	*type = this->vartype(vname);
+	*ndims = this->varndims(vname);
+	size_t *dims = this->vardims(vname);
+
+	size_t count = 1;
+	for (int i = 0; i < *ndims; i++) {
+		count *= stop[i];
+	}
+
+	data = (void*) malloc(this->vartypesize(vname) * count);
+
+	/* read data of selected variable */
+	if (this->inkind == NC_FORMAT_NETCDF4) {
+		this->stat = nc_get_vara(this->igrp, this->varid(vname), start, dims,
+				data);
+		WRFCHECK(this->stat, nc_get_vara);
+	} else {
+		/* Unfortunately, above typeless copy not allowed for
+		 * classic model
+		 */
+		switch (*type) {
+		case NC_CHAR:
+			this->stat = nc_get_vara_text(this->igrp, this->varid(vname),
+					start, stop, (char *) data);
+			WRFCHECK(this->stat, nc_get_vara_text);
+			break;
+		case NC_SHORT:
+			this->stat = nc_get_vara_short(this->igrp, this->varid(vname),
+					start, stop, (short int *) data);
+			WRFCHECK(this->stat, nc_get_vara_short);
+			break;
+		case NC_INT:
+			this->stat = nc_get_vara_int(this->igrp, this->varid(vname),
+					start, stop, (int *) data);
+			WRFCHECK(this->stat, nc_get_vara_int);
+			break;
+		case NC_FLOAT:
+			this->stat = nc_get_vara_float(this->igrp, this->varid(vname),
+					start, stop, (float *) data);
+			WRFCHECK(this->stat, nc_get_vara_float);
+			break;
+		case NC_DOUBLE:
+			this->stat = nc_get_vara_double(this->igrp, this->varid(vname),
+					start, stop, (double *) data);
+			WRFCHECK(this->stat, nc_get_vara_double);
+			break;
+		default:
+			printf("ABORT: variable type not implemented!\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	return data;
+}
+
+void* WRFncdf::vardata(string vname, int *type, int *ndims, size_t *stop) {
+	*ndims = this->varndims(vname);
+	size_t *dims = this->vardims(vname);
+	size_t start[*ndims];
+
+	for (int i = 0; i < *ndims; i++) {
+		start[i] = 0;
+		stop[i] = this->dimlen(dims[i]);
+	}
+
+	return vardata(vname, type, ndims, start, stop);
+}
+
+/* formated print of data in union buf */
+void print_data(union buf* buf, size_t count[], int dim, int ndims, long offset, int vtype) {
+	for (int j=0; j<dim-1; j++) {printf(" ");}
+	printf("[");
+	for (long i=0; i<count[dim-1]; i++) {
+		if (dim < ndims) {
+			printf("\n");
+			long offsetcur = count[dim];
+			print_data(buf, count, dim+1, ndims, offset+offsetcur*i, vtype);
+		} else {
+				switch (vtype) {
+				case NC_CHAR:
+					printf("%c", buf->c[i+offset]);
+					break;
+				case NC_SHORT:
+					printf("%i", buf->s[i+offset]);
+					break;
+				case NC_INT:
+					printf("%i", buf->i[i+offset]);
+					break;
+				case NC_FLOAT:
+					printf("%f", buf->f[i+offset]);
+					break;
+				case NC_DOUBLE:
+					printf("%f", buf->d[i+offset]);
+					break;
+				default:
+					printf("ABORT: variable type not implemented!\n");
+					exit(EXIT_FAILURE);
+				}
+				if (i<count[dim-1]-1) printf(", ", dim);
+		}
+	}
+	printf("]");
+}
+
+/* print variable data */
+void WRFncdf::printvardata(string vname) {
+	int ndims = this->varndims(vname);
+	if (ndims > 4) {
+		printf("ABORT: %iD data not supported!\n", ndims);
+		exit (EXIT_FAILURE);
+	}
+
+	// read data
+	size_t dimlens[this->varndims(vname)];
+	union buf buf;
+	int vtype;
+	buf.v = this->vardata(vname, &vtype, &ndims, dimlens);
+
+	print_data(&buf, dimlens, 1, ndims, 0, vtype);
+	printf("\n");
+}
+
+void WRFncdf::printvardata(int step, string vname) {
+	int ndims = this->varndims(vname);
+	if (ndims > 4) {
+		printf("ABORT: %iD data not supported!\n", ndims);
+		exit (EXIT_FAILURE);
+	}
+
+	// get slicing indices
+	size_t start[this->varndims(vname)];
+	size_t dimlens[this->varndims(vname)];
+	size_t *dims = this->vardims(vname);
+	start[0] = 0;
+	dimlens[0] = 1;
+	for (int i = 1; i < ndims; i++) {
+		start[i] = 0;
+		dimlens[i] = this->dimlen(dims[i]);
+	}
+
+	// read data
+	union buf buf;
+	int vtype;
+	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
+
+	print_data(&buf, dimlens, 1, ndims, 0, vtype);
+	printf("\n");
+}
+
+void WRFncdf::printvardata(int step, int level, string vname) {
+	int ndims = this->varndims(vname);
+	if (ndims > 4) {
+		printf("ABORT: %iD data not supported!\n", ndims);
+		exit (EXIT_FAILURE);
+	}
+
+	// get slicing indices
+	size_t start[this->varndims(vname)];
+	size_t dimlens[this->varndims(vname)];
+	size_t *dims = this->vardims(vname);
+	start[0] = step;
+	dimlens[0] = 1;
+	start[1] = level;
+	dimlens[1] = 1;
+	for (int i = 2; i < ndims; i++) {
+		start[i] = 0;
+		dimlens[i] = this->dimlen(dims[i]);
+	}
+
+	// read data
+	union buf buf;
+	int vtype;
+	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
+
+	print_data(&buf, dimlens, 1, ndims, 0, vtype);
+	printf("\n");
+}
+
+/* plots variable data */
+void WRFncdf::plotvardata(string vname) {
+	int ndims = this->varndims(vname);
+	if (ndims != 2) {
+		printf("ABORT: Wrong number of arguments for %iD plot!\n", ndims);
+		exit (EXIT_FAILURE);
+	}
+
+	// read data
+	size_t dimlens[this->varndims(vname)];
+	union buf buf;
+	int vtype;
+	buf.v = this->vardata(vname, &vtype, &ndims, dimlens);
+
+	// fill data into plot array
+    float **data = allocate2D(dimlens[1], dimlens[0]);
+    for (long j=0; j<dimlens[0]; j++) {
+    	for (long i=0; i<dimlens[1]; i++) {
+    		data[i][j] = buf.f[i+j*dimlens[1]];
+    	}
+    }
+
+    QuickPlot(dimlens[1], dimlens[0], data);
+	free(buf.v);
+	free(data);
+}
+
+void WRFncdf::plotvardata(int step, string vname) {
+	int ndims = this->varndims(vname);
+	if (ndims != 3) {
+		printf("ABORT: Wrong number of arguments for %iD plot!\n", ndims);
+		exit (EXIT_FAILURE);
+	}
+
+	// get slicing indices
+	size_t start[this->varndims(vname)];
+	size_t dimlens[this->varndims(vname)];
+	size_t *dims = this->vardims(vname);
+	start[0] = 0;
+	dimlens[0] = 1;
+	for (int i = 1; i < ndims; i++) {
+		start[i] = 0;
+		dimlens[i] = this->dimlen(dims[i]);
+	}
+
+	// read data
+	union buf buf;
+	int vtype;
+	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
+
+	// fill data into plot array
+	float **data = allocate2D(dimlens[2], dimlens[1]);
+    for (long j=0; j<dimlens[1]; j++) {
+    	for (long i=0; i<dimlens[2]; i++) {
+    		data[i][j] = buf.f[i+j*dimlens[2]];
+    	}
+    }
+
+    //plot data
+	QuickPlot(dimlens[2], dimlens[1], data);
+
+	//free used memory
+	free(buf.v);
+	free(data);
+}
+
+void WRFncdf::plotvardata(int step, int level, string vname) {
+	int ndims = this->varndims(vname);
+	if (ndims != 4) {
+		printf("ABORT: Wrong number of arguments for %iD plot!\n", ndims);
+		exit (EXIT_FAILURE);
+	}
+
+	// get slicing indices
+	size_t start[this->varndims(vname)];
+	size_t dimlens[this->varndims(vname)];
+	size_t *dims = this->vardims(vname);
+	start[0] = step;
+	dimlens[0] = 1;
+	start[1] = level;
+	dimlens[1] = 1;
+	for (int i = 2; i < ndims; i++) {
+		start[i] = 0;
+		dimlens[i] = this->dimlen(dims[i]);
+	}
+
+	// read data
+	union buf buf;
+	int vtype;
+	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
+
+	// fill data into plot array
+	float **data = allocate2D(dimlens[3], dimlens[2]);
+    for (long j=0; j<dimlens[2]; j++) {
+    	for (long i=0; i<dimlens[3]; i++) {
+    		data[i][j] = buf.f[i+j*dimlens[3]];
+    	}
+    }
+
+    //plot data
+	QuickPlot(dimlens[3], dimlens[2], data);
+
+	//free used memory
+	free(buf.v);
+	free(data);
+}
+
+/* returns length of dimension
+ * INPUT:	dimid	dimension id
+ */
+size_t WRFncdf::dimlen(int dimid) {
+	return this->dimlength[dimid];
+}
+
+/* checks if dimension is unlimited
+ * INPUT:	dimid	dimension id
+ */
+bool WRFncdf::is_unlim(int dimid) {
+	for (int i=0; i<this->nunlims; i++) if (this->unlimids[i] == dimid) return true;
+	return false;
 }
