@@ -85,9 +85,12 @@ class WRFncdf {
 	vector <string> dimnames;
 	vector <string> varnames;
 
+	void Init (string, int); //Initialize WRF object
+
   public:
 	/* constructor and destructor */
-	WRFncdf (string); //open WRF file
+	WRFncdf (string, int); //open WRF file
+	WRFncdf (string);
    ~WRFncdf (void); //close WRF file
 
    /* general methods */
@@ -123,6 +126,7 @@ class WRFncdf {
    size_t varcount(string); // returns count of variable elements
    void* vardata(string, int*, int*, size_t*, size_t*); // returns variable data
    void* vardata(string, int*, int*, size_t*); // returns variable data
+   void* vardata(string);
    void plotvardata(string); // plot variable data
    void plotvardata(int, string);
    void plotvardata(int, int, string);
@@ -136,6 +140,9 @@ class WRFncdf {
    string attname(int, int); // returns att name of var id and att id
    string attname(string, int);
    int atttype(int, int); // returns att type
+   size_t attlen(int, string); /* returns length of attribute */
+   size_t attlen(int, int);
+   size_t gattlen(int); /* returns length of global attribute */
    WRFattval attval(int, int); // returns att value as union
    string attvalstr(int, int); // returns att value as string
    string attvalstr(string, int); // returns att value as string
@@ -146,6 +153,26 @@ class WRFncdf {
    WRFattval gattval(int); // returns global att value as union
    string gattvalstr(int); // returns global att value as string
 
+   void defdim(string, size_t); // define a dimension
+   void defvar(string, int, int, size_t*);
+   void putvaratt(int, string, size_t, string); /* put string attribute */
+   void putvaratt(int, string, size_t, int); /* put int attribute */
+   void putvaratt(int, string, size_t, long); /* put long attribute */
+   void putvaratt(int, string, size_t, float); /* put long attribute */
+   void putvaratt(int, string, size_t, double); /* put double attribute */
+   void putvaratt(int, string, int, size_t, union WRFattval); /* put attribute using union structure */
+
+   /* put global attribute */
+   void putgatt(string, size_t, string);
+   void putgatt(string, size_t, int);
+   void putgatt(string, size_t, long);
+   void putgatt(string, size_t, float);
+   void putgatt(string, size_t, double);
+   void putgatt(string, int, size_t, union WRFattval);
+
+   /* fill variable data */
+   void putdata(int, void *);
+   void putdata(int, size_t *, size_t *, void *, int);
 };
 
 #endif /* UTILS_H_ */

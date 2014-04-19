@@ -20,4 +20,4 @@ WRF_dump:
 	$(CXX) -o WRF_dump WRF_dump.cpp -I. -I../QuickPlot -L. -lutils -Wl,-rpath,'.' -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot' -lnetcdf -lnetcdf_c++
 	
 WRF_copy:
-	$(CXX) -o WRF_copy WRF_copy.cpp -I. -L. -lutils -Wl,-rpath,'.'
+	$(CXX) -o WRF_copy WRF_copy.cpp -I. -I../QuickPlot -L. -lutils -Wl,-rpath,'.' -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot' -lnetcdf -lnetcdf_c++

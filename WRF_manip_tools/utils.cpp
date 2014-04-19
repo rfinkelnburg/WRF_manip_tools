@@ -232,9 +232,9 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 	return EXIT_SUCCESS;
 }
 
-/*************************
- * WRF netcdf file class *
- *************************/
+/********************************************************************************
+ *                           WRF netcdf file class                              *
+ ********************************************************************************/
 
 /* dumps info if netcdf error */
 void WRFcheck(int err, const char* fcn, const char* file, const int line) {
@@ -248,21 +248,35 @@ void WRFcheck(int err, const char* fcn, const char* file, const int line) {
 /* macro checks netcdf error code */
 #define WRFCHECK(stat,f) if(stat != NC_NOERR) {WRFcheck(stat,#f,__FILE__,__LINE__);} else {}
 
+/**********************************
+ * Constructors and intialization *
+ **********************************/
+
 /* constructor of WRFncdf class */
-WRFncdf::WRFncdf(string f) {
+void WRFncdf::Init(string f, int rw_flag) {
 	size_t len;
 	char dname[NC_MAX_NAME];
 	this->filename = f;
 	int inparid;
 
-	/*************
-	 * open file *
+	/* open file *
 	 *************/
-	this->stat = nc_open(filename.c_str(),NC_NOWRITE,&this->igrp);
+	if (rw_flag == 2) { // create netcdf file if not existing and return
+		this->stat = nc_create(filename.c_str(),NC_NOCLOBBER,&this->igrp);
+		WRFCHECK(this->stat, nc_create);
+		return;
+	}
+
+	if (rw_flag == 3) { // create netcdf file. overwrite if existing and return
+		this->stat = nc_create(filename.c_str(),NC_CLOBBER,&this->igrp);
+		WRFCHECK(this->stat, nc_create);
+		return;
+	}
+
+	this->stat = nc_open(filename.c_str(),rw_flag,&this->igrp);
 	WRFCHECK(this->stat, nc_open);
 
-	/**************************
-	 * check for multi-groups *
+	/* check for multi-groups *
 	 **************************/
 	this->stat = nc_inq_grp_parent(this->igrp, &inparid);
     if(this->stat != NC_ENOGRP) {
@@ -270,14 +284,12 @@ WRFncdf::WRFncdf(string f) {
         	exit(1);
     }
 
-	/*********************
-	 * get netcdf format *
+	/* get netcdf format *
 	 *********************/
 	this->stat = nc_inq_format(this->igrp, &this->inkind);
 	WRFCHECK(this->stat,nc_inq_format);
 
-	/***********************
-	 * get dimension infos *
+	/* get dimension infos *
 	 ***********************/
 	/* get number of dims */
 	this->stat = nc_inq_ndims(this->igrp, &this->dims);
@@ -306,8 +318,7 @@ WRFncdf::WRFncdf(string f) {
 		this->dimnames.push_back(dname);
 	}
 
-	/**********************
-	 * get variable infos *
+	/* get variable infos *
 	 **********************/
 	/* get number of variables */
     this->stat = nc_inq_nvars(this->igrp, &this->vars);
@@ -323,11 +334,30 @@ WRFncdf::WRFncdf(string f) {
 	}
 }
 
+/*
+ * nc_open:
+ * 	0 NC_NOWRITE
+ * 	1 NC_WRITE
+ * nc_create
+ * 	2 creates file if not existing
+ * 	3 creates file and overwrites if existing
+ */
+WRFncdf::WRFncdf(string f, int rw_flag) {
+	this->Init(f, rw_flag);
+}
+
+WRFncdf::WRFncdf(string f) {
+	this->Init(f, NC_NOWRITE);
+}
 /* destructor of WRFncdf class */
-WRFncdf::~WRFncdf (void) {
+WRFncdf::~WRFncdf(void) {
 	/* close file */
 	this->stat = nc_close(this->igrp);
 }
+
+/*******************
+ * Reading methods *
+ *******************/
 
 /* returns format id of current netcdf file */
 int WRFncdf::getformatid(void) {
@@ -479,6 +509,22 @@ WRFattval WRFncdf::attval(int varid, int attid) {
 	}
 
 	return val;
+}
+
+/* returns length of variable attribute */
+size_t WRFncdf::attlen(int varid, string aname) {
+	size_t len;
+	this->stat = nc_inq_attlen(this->igrp, varid, aname.c_str(), &len);
+	return len;
+}
+
+size_t WRFncdf::attlen(int varid, int attid) {
+	return this->attlen(varid, this->attname(varid, attid));
+}
+
+/* returns length of global attribute */
+size_t WRFncdf::gattlen(int attid) {
+	return this->attlen(NC_GLOBAL, this->gattname(attid));
 }
 
 /* returns gloabal att value as union */
@@ -739,8 +785,47 @@ void* WRFncdf::vardata(string vname, int *type, int *ndims, size_t *stop) {
 		stop[i] = this->dimlen(dims[i]);
 	}
 
-	return vardata(vname, type, ndims, start, stop);
+	return this->vardata(vname, type, ndims, start, stop);
 }
+
+void* WRFncdf::vardata(string vname) {
+	void *data;
+
+	nc_type type = this->vartype(vname);
+	int ndims = this->varndims(vname);
+	size_t *dims = this->vardims(vname);
+
+	size_t count = 1;
+	for (int i = 0; i < ndims; i++) {
+		count *= dims[i];
+	}
+
+	data = (void*) malloc(this->vartypesize(vname) * count);
+
+	this->stat = nc_get_var(this->igrp, this->varid(vname),  data);
+	WRFCHECK(this->stat, nc_get_var);
+
+	return data;
+}
+
+/* returns length of dimension
+ * INPUT:	dimid	dimension id
+ */
+size_t WRFncdf::dimlen(int dimid) {
+	return this->dimlength[dimid];
+}
+
+/* checks if dimension is unlimited
+ * INPUT:	dimid	dimension id
+ */
+bool WRFncdf::is_unlim(int dimid) {
+	for (int i=0; i<this->nunlims; i++) if (this->unlimids[i] == dimid) return true;
+	return false;
+}
+
+/*************************
+ * Plotting and printing *
+ *************************/
 
 /* formated print of data in union buf */
 void print_data(union buf* buf, size_t count[], int dim, int ndims, long offset, int vtype) {
@@ -959,17 +1044,203 @@ void WRFncdf::plotvardata(int step, int level, string vname) {
 	free(data);
 }
 
-/* returns length of dimension
- * INPUT:	dimid	dimension id
+/*************************
+ * Defining and creating *
+ *************************/
+
+/*
+ * define new dimension within open file
  */
-size_t WRFncdf::dimlen(int dimid) {
-	return this->dimlength[dimid];
+void WRFncdf::defdim(string dname, size_t len) {
+	int dimid;
+
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	this->stat = nc_def_dim(this->igrp, dname.c_str(), len, &dimid);
+	WRFCHECK(this->stat, nc_def_dim);
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
 }
 
-/* checks if dimension is unlimited
- * INPUT:	dimid	dimension id
+/*
+ * define new variable within open file
  */
-bool WRFncdf::is_unlim(int dimid) {
-	for (int i=0; i<this->nunlims; i++) if (this->unlimids[i] == dimid) return true;
-	return false;
+void WRFncdf::defvar(string vname, int vtype, int ndims, size_t *dimids) {
+	int varid;
+	int ids[ndims];
+	for (int i = 0; i<ndims; i++) ids[i] = int(dimids[i]);
+
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	this->stat = nc_def_var(this->igrp, vname.c_str(), vtype, ndims, ids, &varid);
+	WRFCHECK(this->stat, nc_def_var);
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+}
+
+/* put string attribute */
+void WRFncdf::putvaratt(int varid, string aname, size_t len, string aval) {
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	this->stat = nc_put_att(this->igrp, varid, aname.c_str(), NC_CHAR, len, aval.c_str());
+	WRFCHECK(this->stat, nc_put_att);
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+}
+
+/* put int attribute */
+void WRFncdf::putvaratt(int varid, string aname, size_t len, int aval) {
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	this->stat = nc_put_att(this->igrp, varid, aname.c_str(), NC_SHORT, len, &aval);
+	WRFCHECK(this->stat, nc_put_att);
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+}
+
+/* put long attribute */
+void WRFncdf::putvaratt(int varid, string aname, size_t len, long aval) {
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	this->stat = nc_put_att(this->igrp, varid, aname.c_str(), NC_LONG, len, &aval);
+	WRFCHECK(this->stat, nc_put_att);
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+}
+
+/* put long attribute */
+void WRFncdf::putvaratt(int varid, string aname, size_t len, float aval) {
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	this->stat = nc_put_att(this->igrp, varid, aname.c_str(), NC_FLOAT, len, &aval);
+	WRFCHECK(this->stat, nc_put_att);
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+}
+
+/* put double attribute */
+void WRFncdf::putvaratt(int varid, string aname, size_t len, double aval) {
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	this->stat = nc_put_att(this->igrp, varid, aname.c_str(), NC_DOUBLE, len, &aval);
+	WRFCHECK(this->stat, nc_put_att);
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+}
+
+void WRFncdf::putvaratt(int varid, string aname, int atype, size_t len, union WRFattval aval) {
+	/*Enter define mode */
+	this->stat = nc_redef(this->igrp);
+
+	switch (atype) {
+	case 2: /* ISO/ASCII character */
+		printf("ABORT: Please use attvalstr() for string attributes!'n");
+		exit(EXIT_FAILURE);
+		break;
+	case 3: /* signed 2 byte integer */
+		this->stat = nc_put_att(this->igrp, varid, aname.c_str(), atype, len, &aval.i);
+		WRFCHECK(this->stat, nc_put_att);
+		break;
+	case 4: /* signed 4 byte integer */
+		this->stat = nc_put_att(this->igrp, varid, aname.c_str(), atype, len, &aval.l);
+		WRFCHECK(this->stat, nc_put_att);
+		break;
+	case 5: /* single precision floating point number */
+		this->stat = nc_put_att(this->igrp, varid, aname.c_str(), atype, len, &aval.f);
+		WRFCHECK(this->stat, nc_put_att);
+		break;
+	case 6: /* double precision floating point number */
+		this->stat = nc_put_att(this->igrp, varid, aname.c_str(), atype, len, &aval.d);
+		WRFCHECK(this->stat, nc_put_att);
+		break;
+	case 11: /* signed 8-byte int */
+		this->stat = nc_put_att(this->igrp, varid, aname.c_str(), atype, len, &aval.ll);
+		WRFCHECK(this->stat, nc_put_att);
+		break;
+	default:
+		printf("ABORT: Attribute type not implemented!\n");
+		exit(EXIT_FAILURE);
+	}
+
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+}
+
+/* put global attribute */
+void WRFncdf::putgatt(string aname, size_t len, string aval) {
+	this->putvaratt(NC_GLOBAL, aname, len, aval);
+}
+
+void WRFncdf::putgatt(string aname, size_t len, int aval) {
+	this->putvaratt(NC_GLOBAL, aname, len, aval);
+}
+
+void WRFncdf::putgatt(string aname, size_t len, long aval) {
+	this->putvaratt(NC_GLOBAL, aname, len, aval);
+}
+
+void WRFncdf::putgatt(string aname, size_t len, float aval) {
+	this->putvaratt(NC_GLOBAL, aname, len, aval);
+}
+
+void WRFncdf::putgatt(string aname, size_t len, double aval) {
+	this->putvaratt(NC_GLOBAL, aname, len, aval);
+}
+
+void WRFncdf::putgatt(string aname, int atype, size_t len, union WRFattval aval) {
+	this->putvaratt(NC_GLOBAL, aname, atype, len, aval);
+}
+
+void WRFncdf::putdata(int varid, size_t *start, size_t *stop, void *data, int vtype) {
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+
+	switch(vtype) {
+	case NC_CHAR:
+		this->stat = nc_put_vara_text(this->igrp, varid, start, stop, (char *) data);
+		WRFCHECK(this->stat, nc_put_vara_text);
+		break;
+	case NC_SHORT:
+		this->stat = nc_put_vara_short(this->igrp, varid, start, stop, (short int *) data);
+		WRFCHECK(this->stat, nc_put_vara_short);
+		break;
+	case NC_INT:
+		this->stat = nc_put_vara_int(this->igrp, varid, start, stop, (int *) data);
+		WRFCHECK(this->stat, nc_put_vara_int);
+		break;
+	case NC_FLOAT:
+		this->stat = nc_put_vara_float(this->igrp, varid, start, stop, (float *) data);
+		WRFCHECK(this->stat, nc_put_vara_float);
+		break;
+	case NC_DOUBLE:
+		this->stat = nc_put_vara_double(this->igrp, varid, start, stop, (double *) data);
+		WRFCHECK(this->stat, nc_put_vara_double);
+		break;
+	default:
+		printf("ABORT: variable type not implemented!\n");
+		exit(EXIT_FAILURE);
+	}
+}
+
+/* this is for netcdf4 files */
+void WRFncdf::putdata(int varid, void *data) {
+	/*Close define mode */
+	this->stat = nc_enddef(this->igrp);
+
+	this->stat = nc_put_var(this->igrp, varid, data);
+	WRFCHECK(this->stat, nc_put_var);
 }

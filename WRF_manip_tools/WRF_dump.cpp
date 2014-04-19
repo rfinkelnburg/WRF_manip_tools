@@ -122,8 +122,8 @@ void dump_this_variable(WRFncdf *w, string variable, int outopt, int step, int l
        	exit (EXIT_FAILURE);
     }
 
-    if (outopt != 1 and w->vartype(variable) == NC_CHAR) {
-		printf("ABORT: Character variables can only be printed!\n");
+    if (outopt == 2 and w->vartype(variable) == NC_CHAR) {
+		printf("ABORT: Character variables can only be plotted!\n");
        	exit (EXIT_FAILURE);
 	}
 
@@ -133,41 +133,22 @@ void dump_this_variable(WRFncdf *w, string variable, int outopt, int step, int l
            	exit (EXIT_FAILURE);
     }
 
-    /* print data */
-    if (outopt == 1) {
-    	switch(argc) {
-    	case 4:
-    		w->printvardata(variable);
-			break;
-    	case 5:
-    		w->printvardata(step, variable);
-			break;
-    	case 6:
-    		w->printvardata(step, level, variable);
-			break;
-		default:
-			printf("ABORT: %iD output not implemented!\n", w->varndims(variable));
-			exit(EXIT_FAILURE);
-		}
-    }
-
-    /* plot data */
-    if (outopt == 2) {
-    	switch (w->varndims(variable)) {
-    	case 2:
-    		w->plotvardata(variable);
-    		break;
-    	case 3:
-    		w->plotvardata(step, variable);
-    		break;
-    	case 4:
-    		w->plotvardata(step, level, variable);
-			break;
-		default:
-			printf("ABORT: %iD output not implemented!\n", w->varndims(variable));
-			exit(EXIT_FAILURE);
-		}
-    }
+    /* print or plot data */
+   	switch(argc) {
+   	case 4:
+   		if (outopt == 1) w->printvardata(variable);
+   		if (outopt == 2) w->plotvardata(variable);
+		break;
+   	case 5:
+   		if (outopt == 1) w->printvardata(step, variable);
+   		if (outopt == 2) w->plotvardata(step, variable);
+		break;
+   	case 6:
+   		if (outopt == 1) w->printvardata(step, level, variable);
+   		if (outopt == 2) w->plotvardata(step, level, variable);
+		break;
+	default: break;
+	}
 }
 
 int main(int argc, char** argv) {
