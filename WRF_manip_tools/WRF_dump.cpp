@@ -20,7 +20,6 @@
 
 using namespace std;
 
-
 /* check the netcdf error codes */
 void check(int err, const char* fcn, const char* file, const int line) {
     fprintf(stderr,"%s\n",nc_strerror(err));
@@ -152,8 +151,7 @@ void dump_this_variable(WRFncdf *w, string variable, int outopt, int step, int l
 }
 
 int main(int argc, char** argv) {
-	int stat = NC_NOERR;
-	int igrp, inkind, inparid, step, level;
+	int step, level;
 	string ifilename, variable;
 	bool f_var;
 	int outopt = 0;

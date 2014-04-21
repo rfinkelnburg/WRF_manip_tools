@@ -66,7 +66,6 @@ int main(int argc, char** argv) {
 	 *************************/
 	int type, ndims;
 	for (int varid = 0; varid < w_in.nvars(); varid++) {
-//		w_out.putdata(varid, w_in.vardata(w_in.varname(varid))); //only for NetCDF4
 		ndims = w_in.varndims(varid);
 		size_t *dims = w_in.vardims(varid);
 		size_t start[ndims];

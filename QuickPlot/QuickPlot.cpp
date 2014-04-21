@@ -36,6 +36,7 @@ public:
 /* plot 2D float array */
 void QuickPlot(int nx, int ny, float **data)
 {
+	printf("QPF %i, %i\n", nx, ny);
 	float max_plot_dim = 800.0;
 	float xfac = 1.0;
         float yfac = 1.0;
@@ -48,9 +49,9 @@ void QuickPlot(int nx, int ny, float **data)
 
 	/* transform data into QVector */	
 	QVector<double> zVector(nx*ny);
-	for(long j = 0; j < ny; j++)
-		for(long i = 0; i < nx; i++)
-			zVector[i+j*nx] = double(data[i][j]);
+	for(long i = 0; i < nx; i++)
+		for(long j = 0; j < ny; j++)
+			zVector[j+i*ny] = double(data[i][j]);
 
 	/* transform data into matrix format */	
 	QwtMatrixRasterData *matrix = new QwtMatrixRasterData();
@@ -105,4 +106,81 @@ void QuickPlot(int nx, int ny, float **data)
     	plot->show();
 
 	app.exec();
+}
+
+/*
+ * Rotation:
+ *	0: x=x, y=y (no rotation)
+ *	1: x=x, y=-y
+ *	2: x=y, y=x
+ *	3: x=y, y=-x
+ *	4: x=-x, y=y
+ *	5: x=-x, y=-y
+ *	6: x=-y, y=x
+ *	7: x=-y, y=-x
+ */
+void QuickPlot_rot(int nx, int ny, void *data, int ori) {
+	printf("QPR %i, %i\n", nx, ny);
+	int i, j, ni, nj;	
+	float **dat;
+
+	switch(ori) {
+	case 0: // x=x and y=y (no rotation)
+		ni = nx;
+		nj = ny;
+		break;
+	case 1: // x=x and y=-y
+		ni = nx;
+		nj = -ny;
+		break;
+	case 2: // x=y and y=x
+		ni = ny;
+		nj = nx;
+		break;
+	case 3: // x=y and y=-x
+		ni = ny;
+		nj = -nx;
+		break;
+	case 4: // x=-x and y=y
+		ni = -nx;
+		nj = ny;
+		break;
+	case 5: // x=-x and y=-y
+		ni = -nx;
+		nj = -ny;
+		break;
+	case 6: // x=-y and y=x
+		ni = -ny;
+		nj = nx;
+		break;
+	case 7: // x=-y and y=-x
+		ni = -ny;
+		nj = -nx;
+		break;
+	default:
+		exit(1);	
+	}
+
+	dat = (float**)malloc(ni*sizeof(float*)); // allocate array of pointers
+	if(dat==NULL) {
+		printf("\nError allocating memory\n");
+		exit(1);
+	}
+
+	for(i = 0; i < ni; i++) dat[i] = (float*)malloc(nj*sizeof(float)); // allocate each row
+
+	if(dat[i-1]==NULL) {
+		printf("\nError allocating memory\n");
+		exit(1);
+	}
+
+	for (i=0; i<ni; i++)
+		for (j=0; j<nj; j++)
+			dat[i][j] = ((float*)data)[i*nj+j];
+	QuickPlot(ni, nj, dat);
+}
+
+void QuickPlot(int nx, int ny, void *data) {
+	printf("QPV %i, %i\n", nx, ny);
+	QuickPlot_rot(nx, ny, data, 2);	
 } 

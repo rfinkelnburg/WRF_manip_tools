@@ -1,6 +1,6 @@
 CXXFLAGS =	-O2 -g -Wall -fmessage-length=0
 
-TARGET =	utils IFF_dump IFF_copy WRF_dump WRF_copy
+TARGET =	utils IFF_dump IFF_copy WRF_dump WRF_copy WRF2IFF
 
 all:	$(TARGET)
 
@@ -8,7 +8,7 @@ clean:
 	rm -f $(TARGET) $(TARGET).o libutils.so
 
 utils:
-	g++ -fPIC -shared utils.cpp -o libutils.so -I../QuickPlot -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot' -lnetcdf -lnetcdf_c++
+	g++ -fPIC -shared utils.cpp -o libutils.so -I../QuickPlot -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot' -lnetcdf -lnetcdf_c++ -lm
 	
 IFF_dump:
 	$(CXX) -o IFF_dump IFF_dump.cpp -I. -I../QuickPlot -L. -lutils -Wl,-rpath,'.' -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot'
@@ -21,3 +21,6 @@ WRF_dump:
 	
 WRF_copy:
 	$(CXX) -o WRF_copy WRF_copy.cpp -I. -I../QuickPlot -L. -lutils -Wl,-rpath,'.' -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot' -lnetcdf -lnetcdf_c++
+
+WRF2IFF:
+	$(CXX) -o WRF2IFF WRF2IFF.cpp -I. -I../QuickPlot -L. -lutils -Wl,-rpath,'.' -L../QuickPlot -lQuickPlot -Wl,-rpath,'../QuickPlot' -lnetcdf -lnetcdf_c++	

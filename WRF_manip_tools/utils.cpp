@@ -232,6 +232,35 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 	return EXIT_SUCCESS;
 }
 
+/* Calculates relative humidity from WRF output.
+ * INPUT:
+ * 	qv	Water vapor mixing ratio [kg/kg]
+ * 	p	Full pressure (perutrbation + base state pressure [Pa]
+ * 	t	Temperature [K]
+ */
+double utils_wrf_rh(double qv, double p, double t) {
+	double SVP1 = 0.6112;
+	double SVP2 = 17.67;
+	double SVP3 = 29.65;
+	double SVPT0 = 273.15;
+
+	double R_D = 287.04;
+	double R_V = 461.6;
+	double EP_2 = R_D / R_V;
+
+	double EP_3 = 0.622;
+
+	double ES = 10.0 * SVP1 * exp(SVP2 * (t-SVPT0)/(t-SVP3));
+	double QVS = EP_3 * ES / (0.01 * p - ((1.0 - EP_3) * ES));
+
+	if (qv/QVS < 1.0) return 100.0 * (qv/QVS);
+	else return 100.0;
+}
+
+float utils_wrf_rh(float qv, float p, float t) {
+	return float(utils_wrf_rh(double(qv), double(p), double(t)));
+}
+
 /********************************************************************************
  *                           WRF netcdf file class                              *
  ********************************************************************************/
@@ -332,6 +361,14 @@ void WRFncdf::Init(string f, int rw_flag) {
 		WRFCHECK(this->stat, nc_inq_var);
 		this->varnames.push_back(vname);
 	}
+
+    /* get global attribute names and type */
+    this->gatttypes = (nc_type *)malloc(this->ngatts()*sizeof(nc_type));
+	char gattname[NC_MAX_NAME];
+	for (int gattid = 0; gattid < this->ngatts(); gattid++) {
+		this->gatttypes[gattid] = this->gatttype(gattid);
+		this->gattnames.push_back(this->gattname(gattid));
+	}
 }
 
 /*
@@ -428,6 +465,14 @@ int WRFncdf::varid(string vname) {
 	return int(it - this->varnames.begin());
 }
 
+/* returns id of global attribute */
+int WRFncdf::gattid(string aname) {
+	vector <string>::iterator it;
+
+	it = find(this->gattnames.begin(),this->gattnames.end(), aname);
+	return int(it - this->gattnames.begin());
+}
+
 /* checks if var name exists or not */
 bool WRFncdf::varexist(string vname) {
 	if (this->varid(vname) < this->nvars()) return true;
@@ -458,7 +503,7 @@ string WRFncdf::attname(string vname, int attid) {
 
 /* returns global att name of att id */
 string WRFncdf::gattname(int attid) {
-	return this->attname(-1, attid);
+	return this->attname(NC_GLOBAL, attid);
 }
 
 /* returns att type */
@@ -471,7 +516,7 @@ int WRFncdf::atttype(int varid, int attid) {
 
 /* returns global att type */
 int WRFncdf::gatttype(int attid) {
-	return this->atttype(-1, attid);
+	return this->atttype(NC_GLOBAL, attid);
 }
 
 /* returns att value as union */
@@ -788,6 +833,21 @@ void* WRFncdf::vardata(string vname, int *type, int *ndims, size_t *stop) {
 	return this->vardata(vname, type, ndims, start, stop);
 }
 
+void* WRFncdf::vardataraw(string vname) {
+	int type;
+	int ndims = this->varndims(vname);
+	size_t *dims = this->vardims(vname);
+	size_t start[ndims];
+	size_t stop[ndims];
+
+	for (int i = 0; i < ndims; i++) {
+		start[i] = 0;
+		stop[i] = this->dimlen(dims[i]);
+	}
+
+	return this->vardata(vname, &type, &ndims, start, stop);
+}
+
 void* WRFncdf::vardata(string vname) {
 	void *data;
 
@@ -951,17 +1011,10 @@ void WRFncdf::plotvardata(string vname) {
 	int vtype;
 	buf.v = this->vardata(vname, &vtype, &ndims, dimlens);
 
-	// fill data into plot array
-    float **data = allocate2D(dimlens[1], dimlens[0]);
-    for (long j=0; j<dimlens[0]; j++) {
-    	for (long i=0; i<dimlens[1]; i++) {
-    		data[i][j] = buf.f[i+j*dimlens[1]];
-    	}
-    }
+    //plot data
+    QuickPlot(dimlens[0], dimlens[1], buf.v);
 
-    QuickPlot(dimlens[1], dimlens[0], data);
-	free(buf.v);
-	free(data);
+    free(buf.v);
 }
 
 void WRFncdf::plotvardata(int step, string vname) {
@@ -987,20 +1040,11 @@ void WRFncdf::plotvardata(int step, string vname) {
 	int vtype;
 	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
 
-	// fill data into plot array
-	float **data = allocate2D(dimlens[2], dimlens[1]);
-    for (long j=0; j<dimlens[1]; j++) {
-    	for (long i=0; i<dimlens[2]; i++) {
-    		data[i][j] = buf.f[i+j*dimlens[2]];
-    	}
-    }
-
     //plot data
-	QuickPlot(dimlens[2], dimlens[1], data);
+	QuickPlot(dimlens[1], dimlens[2], buf.v);
 
 	//free used memory
 	free(buf.v);
-	free(data);
 }
 
 void WRFncdf::plotvardata(int step, int level, string vname) {
@@ -1028,20 +1072,11 @@ void WRFncdf::plotvardata(int step, int level, string vname) {
 	int vtype;
 	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
 
-	// fill data into plot array
-	float **data = allocate2D(dimlens[3], dimlens[2]);
-    for (long j=0; j<dimlens[2]; j++) {
-    	for (long i=0; i<dimlens[3]; i++) {
-    		data[i][j] = buf.f[i+j*dimlens[3]];
-    	}
-    }
-
     //plot data
-	QuickPlot(dimlens[3], dimlens[2], data);
+	QuickPlot(dimlens[2], dimlens[3], buf.v);
 
 	//free used memory
 	free(buf.v);
-	free(data);
 }
 
 /*************************

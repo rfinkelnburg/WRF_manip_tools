@@ -14,6 +14,7 @@
 #include <netcdf.h>
 #include <netcdfcpp.h>
 #include <vector>
+#include <math.h>
 
 using namespace std;
 
@@ -75,15 +76,26 @@ void printvardata(union buf*, size_t*, int, int, long, int);
 /* writes data set into Intermediate Format Files */
 int write_IFF(ofstream *file, bool endian, struct IFFheader header, struct IFFproj proj, int is_wind_grid_rel, float **data);
 
+/* Calculates relative humidity from WRF output.
+ * INPUT:
+ * 	qv	Water vapor mixing ratio [kg/kg]
+ * 	p	Full pressure (perutrbation + base state pressure [Pa]
+ * 	t	Temperature [K]
+ */
+double utils_wrf_rh(double qv,double p, double t);
+float utils_wrf_rh(float qv, float p, float t);
+
 class WRFncdf {
 	string filename;
 	int stat, igrp, dims, nunlims, inkind, vars;
 	int *dimids;
 	int *unlimids;
 	nc_type *vartypes;
+	nc_type *gatttypes;
 	size_t *dimlength;
 	vector <string> dimnames;
 	vector <string> varnames;
+	vector <string> gattnames;
 
 	void Init (string, int); //Initialize WRF object
 
@@ -126,6 +138,7 @@ class WRFncdf {
    size_t varcount(string); // returns count of variable elements
    void* vardata(string, int*, int*, size_t*, size_t*); // returns variable data
    void* vardata(string, int*, int*, size_t*); // returns variable data
+   void* vardataraw(string);
    void* vardata(string);
    void plotvardata(string); // plot variable data
    void plotvardata(int, string);
@@ -147,6 +160,7 @@ class WRFncdf {
    string attvalstr(int, int); // returns att value as string
    string attvalstr(string, int); // returns att value as string
 
+   int gattid(string); // returns id of global attribute name
    int ngatts(void); // returns number of global attributes
    string gattname(int); // returns global att name of att id
    int gatttype(int); // returns global att type
