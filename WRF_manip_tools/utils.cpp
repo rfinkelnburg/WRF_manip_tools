@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <cstring>
 #include <algorithm>
 #include "utils.h"
 #include "QuickPlot.h"
@@ -232,13 +233,126 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 	return EXIT_SUCCESS;
 }
 
+/* Finds minimum value in float array
+ * INPUT:
+ * 	len	number of array elements
+ * 	vec	float array
+ * OUTPUT:
+ * 	pos	index of minimum value in array
+ */
+float min(size_t len, float *vec, size_t *pos) {
+	float val = vec[0];
+	*pos = 0;
+	for (size_t i=1; i<len; i++) {
+		if (vec[i] < val) {
+			val = vec[i];
+			*pos = i;
+		}
+	}
+	return val;
+}
+
+float min(size_t len, float *vec) {
+	size_t pos;
+	return min(len, vec, &pos);
+
+}
+
+/* Finds maximum value in float array
+ * INPUT:
+ * 	len	number of array elements
+ * 	vec	float array
+ * OUTPUT:
+ * 	pos	index of maximum value in array
+ */
+float max(size_t len, float *vec, size_t *pos) {
+	float val = vec[0];
+	*pos = 0;
+	for (size_t i=1; i<len; i++) {
+		if (vec[i] > val) {
+			val = vec[i];
+			*pos = i;
+		}
+	}
+	return val;
+}
+
+float max(size_t len, float *vec) {
+	size_t pos;
+	return min(len, vec, &pos);
+
+}
+
+/* Finds minimum and maximum value in float array
+ * INPUT:
+ * 	len	number of array elements
+ * 	vec	float array
+ * OUTPUT:
+ * 	max		maximum value in array
+ * 	minpos	index of maximum value in array
+ * 	maxpos	index of maximum value in array
+ */
+float minmax(size_t len, float *vec, float *maxval, size_t *minpos, size_t *maxpos) {
+	float minval = vec[0];
+	*maxval = vec[0];
+	*minpos = 0;
+	*maxpos = 0;
+	for (size_t i=1; i<len; i++) {
+		if (vec[i] < minval) {
+			minval = vec[i];
+			*minpos = i;
+		}
+		if (vec[i] > *maxval) {
+			*maxval = vec[i];
+			*maxpos = i;
+		}
+	}
+	return minval;
+}
+
+float minmax(size_t len, float *vec, float *maxval) {
+	size_t minpos, maxpos;
+	return minmax(len, vec, maxval, &minpos, &maxpos);
+
+}
+
+/* Interpolates between to float values.
+ * val1		float value at index 1 (idx1)
+ * val2 	float value at index 2 (idx2)
+ * idx_res	index of requested value
+ */
+float interpol(float val1, float val2, float idx1, float idx2, float idx_res) {
+	float idx_1, idx_2, val_1, val_2, f_idx;
+	if (idx1 > idx2) {
+		idx_1 = idx2;
+		val_1 = val2;
+		idx_2 = idx1;
+		val_2 = val1;
+	} else {
+		idx_1 = idx1;
+		val_1 = val1;
+		idx_2 = idx2;
+		val_2 = val2;
+	}
+
+	if (idx_res <= idx_1) return val_1;
+	if (idx_res >= idx_2) return val_2;
+
+	f_idx = (idx_res-idx_1) / (idx_2-idx_1);
+
+//	cout << val1 << " (" << idx1 << "), " << val2 << " (" << idx2 <<") -> "
+//	     << val_1*(1.0-f_idx) + val_2*f_idx << " (" << idx_res << ")\n";
+
+	return val_1*(1.0-f_idx) + val_2*f_idx;
+}
+
 /* Calculates relative humidity from WRF output.
  * INPUT:
  * 	qv	Water vapor mixing ratio [kg/kg]
- * 	p	Full pressure (perutrbation + base state pressure [Pa]
+ * 	p	Full pressure (perutrbation + base state pressure) [Pa]
  * 	t	Temperature [K]
  */
-double utils_wrf_rh(double qv, double p, double t) {
+double calc_rh(double qv, double p, double t) {
 	double SVP1 = 0.6112;
 	double SVP2 = 17.67;
 	double SVP3 = 29.65;
@@ -257,8 +371,76 @@ double utils_wrf_rh(double qv, double p, double t) {
 	else return 100.0;
 }
 
-float utils_wrf_rh(float qv, float p, float t) {
-	return float(utils_wrf_rh(double(qv), double(p), double(t)));
+float calc_rh(float qv, float p, float t) {
+	return float(calc_rh(double(qv), double(p), double(t)));
+}
+
+/* converts time char pointer to string time stamp */
+string time2str(void* ch, int n) {
+	string tstr;
+	if (!((char*)ch)[18+n*19]) {
+		printf("ERROR: Time stamp %i not available\n", n);
+		exit(1);
+	}
+	for (int i=0; i<19; i++) tstr += ((char*)ch)[i+n*19];
+    return tstr;
+}
+
+/* checks if dimension order of variable is "correct" */
+void check_memorder(WRFncdf *w, string variable, string flag) {
+	/* check for surface variable (3D)*/
+	if ((flag.compare(0,strlen("SFC"),"SFC") == 0) &&
+	   (w->varndims(variable) != 3 ||
+		w->vardims(variable)[0] != w->dimid("Time") ||
+		w->vardims(variable)[1] != w->dimid("south_north") ||
+		w->vardims(variable)[2] != w->dimid("west_east"))) {
+		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for unstaggered variable (4D) */
+	if ((flag.compare(0,strlen("UNSTAG"),"UNSTAG") == 0) &&
+		   (w->varndims(variable) != 4 ||
+			w->vardims(variable)[0] != w->dimid("Time") ||
+			w->vardims(variable)[1] != w->dimid("bottom_top") ||
+			w->vardims(variable)[2] != w->dimid("south_north") ||
+			w->vardims(variable)[3] != w->dimid("west_east"))) {
+			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			exit(EXIT_FAILURE);
+	}
+
+	/* check for bottom top staggered variable (4D) */
+	if ((flag.compare(0,strlen("BT_STAG"),"BT_STAG") == 0) &&
+		   (w->varndims(variable) != 4 ||
+			w->vardims(variable)[0] != w->dimid("Time") ||
+			w->vardims(variable)[1] != w->dimid("bottom_top_stag") ||
+			w->vardims(variable)[2] != w->dimid("south_north") ||
+			w->vardims(variable)[3] != w->dimid("west_east"))) {
+			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			exit(EXIT_FAILURE);
+	}
+
+	/* check for north south staggered variable (4D) */
+	if ((flag.compare(0,strlen("NS_STAG"),"NS_STAG") == 0) &&
+		   (w->varndims(variable) != 4 ||
+			w->vardims(variable)[0] != w->dimid("Time") ||
+			w->vardims(variable)[1] != w->dimid("bottom_top") ||
+			w->vardims(variable)[2] != w->dimid("south_north_stag") ||
+			w->vardims(variable)[3] != w->dimid("west_east"))) {
+			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			exit(EXIT_FAILURE);
+	}
+
+	/* check for west east staggered variable (4D) */
+	if ((flag.compare(0,strlen("WE_STAG"),"WE_STAG") == 0) &&
+		   (w->varndims(variable) != 4 ||
+			w->vardims(variable)[0] != w->dimid("Time") ||
+			w->vardims(variable)[1] != w->dimid("bottom_top") ||
+			w->vardims(variable)[2] != w->dimid("south_north") ||
+			w->vardims(variable)[3] != w->dimid("west_east_stag"))) {
+			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			exit(EXIT_FAILURE);
+	}
 }
 
 /********************************************************************************

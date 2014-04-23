@@ -36,7 +36,6 @@ public:
 /* plot 2D float array */
 void QuickPlot(int nx, int ny, float **data)
 {
-	printf("QPF %i, %i\n", nx, ny);
 	float max_plot_dim = 800.0;
 	float xfac = 1.0;
         float yfac = 1.0;
@@ -120,7 +119,6 @@ void QuickPlot(int nx, int ny, float **data)
  *	7: x=-y, y=-x
  */
 void QuickPlot_rot(int nx, int ny, void *data, int ori) {
-	printf("QPR %i, %i\n", nx, ny);
 	int i, j, ni, nj;	
 	float **dat;
 
@@ -181,6 +179,5 @@ void QuickPlot_rot(int nx, int ny, void *data, int ori) {
 }
 
 void QuickPlot(int nx, int ny, void *data) {
-	printf("QPV %i, %i\n", nx, ny);
 	QuickPlot_rot(nx, ny, data, 2);	
 } 

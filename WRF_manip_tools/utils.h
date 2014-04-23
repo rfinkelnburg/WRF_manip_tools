@@ -76,14 +76,62 @@ void printvardata(union buf*, size_t*, int, int, long, int);
 /* writes data set into Intermediate Format Files */
 int write_IFF(ofstream *file, bool endian, struct IFFheader header, struct IFFproj proj, int is_wind_grid_rel, float **data);
 
-/* Calculates relative humidity from WRF output.
+/* Finds minimum value in float array
+ * INPUT:
+ * 	len	number of array elements
+ * 	vec	float array
+ * OUTPUT:
+ * 	pos	index of minimum value in array
+ */
+float min(size_t len, float *vec, size_t *pos);
+float min(size_t len, float *vec);
+
+/* Finds maximum value in float array
+ * INPUT:
+ * 	len	number of array elements
+ * 	vec	float array
+ * OUTPUT:
+ * 	pos	index of maximum value in array
+ */
+float max(size_t len, float *vec, size_t *pos);
+float max(size_t len, float *vec);
+
+/* Finds minimum and maximum value in float array
+ * INPUT:
+ * 	len	number of array elements
+ * 	vec	float array
+ * OUTPUT:
+ * 	max		maximum value in array
+ * 	minpos	index of maximum value in array
+ * 	maxpos	index of maximum value in array
+ */
+float minmax(size_t len, float *vec, float *maxval, size_t *minpos, size_t *maxpos);
+float minmax(size_t len, float *vec, float *maxval);
+
+/* Interpolates between to float values.
+ * val1		float value at index 1 (idx1)
+ * val2 	float value at index 2 (idx2)
+ * idx_res	index of requested value
+ */
+float interpol(float val1, float val2, float idx1, float idx2, float idx_res);
+
+/*
+ * Calculates relative humidity from WRF output.
  * INPUT:
  * 	qv	Water vapor mixing ratio [kg/kg]
  * 	p	Full pressure (perutrbation + base state pressure [Pa]
  * 	t	Temperature [K]
  */
-double utils_wrf_rh(double qv,double p, double t);
-float utils_wrf_rh(float qv, float p, float t);
+double calc_rh(double qv,double p, double t);
+float calc_rh(float qv, float p, float t);
+
+/*
+ * Converts time char pointer to string time stamp.
+ * INPUT:
+ *  ch	char pointer to beginning of time stamp
+ *  n	number of time stamp element
+ */
+string time2str(void* ch, int n);
 
 class WRFncdf {
 	string filename;
@@ -188,5 +236,19 @@ class WRFncdf {
    void putdata(int, void *);
    void putdata(int, size_t *, size_t *, void *, int);
 };
+
+/*
+ * Checks if dimension order of variable is "correct".
+ * INPUT:
+ * 	w			pointer to wrf file object
+ * 	variable	name of variable
+ * 	flag		expected memory order
+ * 				"SFC" for time dependent surface variables (3D)
+ * 				"UNSTAG" for unstaggered variable (4D)
+ * 				"BT_STAG" for bottom top staggered variable (4D)
+ * 				"NS_STAG" for north south staggered variable (4D)
+ * 				"WE_STAG" for west east staggered variable (4D)
+ */
+void check_memorder(WRFncdf *w, string variable, string flag);
 
 #endif /* UTILS_H_ */

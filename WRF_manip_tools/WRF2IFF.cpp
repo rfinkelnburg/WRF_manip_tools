@@ -11,7 +11,6 @@
 #include <string>
 #include <iostream>
 #include <cstdio>
-
 /* Full documentation of the netCDF C++ API can be found at:
  * http://www.unidata.ucar.edu/software/netcdf/docs/netcdf-cxx
  */
@@ -25,24 +24,13 @@ void print_help(void) {
 	puts("COMMAND: WRF2IFF <WRF file> <ouput directory>");
 }
 
-/* checks if dimension order of variable is "correct" */
-void check_sfc_memorder(WRFncdf *w, string variable) {
-	if (w->varndims(variable) != 3 ||
-		w->vardims(variable)[0] != w->dimid("Time") ||
-		w->vardims(variable)[1] != w->dimid("south_north") ||
-		w->vardims(variable)[2] != w->dimid("west_east")) {
-		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
-		exit(EXIT_FAILURE);
-	}
-}
-
 int main(int argc, char** argv) {
 	int iproj;
 	size_t nx, ny, nt;
 	float dx, dy, startlat, startlon, xlonc, truelat1, eradius;
 	string ifilename, opath, startlonc;
-	void *times, *t2k, *u10, *v10, *w, *w10, *psfc, *q2, *rh2, *zs, *smois, *st, *seaice, *isltyp,
-		 *soilhgt, *skintemp, *snow, *snowh, *sst;
+	void *Time, *t2k, *u10, *v10, *w, *w10, *psfc, *q2, *rh2, *zs, *smois, *st, *seaice, *isltyp,
+		 *soilhgt, *skintemp, *snow, *snowh, *sst, *ph, *phb, *z_stag, *z_unstag;
 
 	if (argc < 3) {
 		print_help();
@@ -78,21 +66,21 @@ int main(int argc, char** argv) {
 	 * Read time variable *
 	 **********************/
 	nt = wrf.dimlen(wrf.dimid("Time"));
-	times = wrf.vardataraw("Times");
+	Time = wrf.vardataraw("Times");
 
 	/**************************
 	 * Read surface variables *
 	 **************************/
-	check_sfc_memorder(&wrf, "T2");
-	check_sfc_memorder(&wrf, "U10");
-	check_sfc_memorder(&wrf, "V10");
-	check_sfc_memorder(&wrf, "PSFC");
-	check_sfc_memorder(&wrf, "SEAICE");
-	check_sfc_memorder(&wrf, "HGT");
-	check_sfc_memorder(&wrf, "TSK");
-	check_sfc_memorder(&wrf, "SNOW");
-	check_sfc_memorder(&wrf, "SNOWH");
-	check_sfc_memorder(&wrf, "SST");
+	check_memorder(&wrf, "T2", "SFC");
+	check_memorder(&wrf, "U10", "SFC");
+	check_memorder(&wrf, "V10", "SFC");
+	check_memorder(&wrf, "PSFC", "SFC");
+	check_memorder(&wrf, "SEAICE", "SFC");
+	check_memorder(&wrf, "HGT", "SFC");
+	check_memorder(&wrf, "TSK", "SFC");
+//	check_memorder(&wrf, "SNOW", "SFC");
+//	check_memorder(&wrf, "SNOWH", "SFC");
+	check_memorder(&wrf, "SST", "SFC");
 
 	t2k = wrf.vardataraw("T2");			// TT		K		200100.
 	u10 = wrf.vardataraw("U10");		// UU		m s-1 	200100.
@@ -101,43 +89,91 @@ int main(int argc, char** argv) {
 	seaice = wrf.vardataraw("SEAICE"); 	// SEAICE	proprtn	200100.
 	soilhgt = wrf.vardataraw("HGT");	// SOILHGT	m		200100.
 	skintemp = wrf.vardataraw("TSK");	// SKINTMP	K		200100.
-	snow = wrf.vardataraw("SNOW");		// SNOW		kg m-2	200100.
-	snowh = wrf.vardataraw("SNOWH");	// SNOWH	m		200100.
+//	snow = wrf.vardataraw("SNOW");		// SNOW		kg m-2	200100.
+//	snowh = wrf.vardataraw("SNOWH");	// SNOWH	m		200100.
 	sst = wrf.vardataraw("SST");		// SST		K		200100.
 
 	/***************************************
 	 * calculate missing surface variables *
 	 ***************************************/
-	/* check if dimension order is "correct" */
 
-//	if !(wrf.dimid("Time"))
-			//(Time, south_north, west_east)
+	/* check memory order of required variables */
+	check_memorder(&wrf, "W", "BT_STAG");
+	check_memorder(&wrf, "PH", "BT_STAG");
+	check_memorder(&wrf, "PHB", "BT_STAG");
+	check_memorder(&wrf, "Q2", "SFC");
 
-	/* get vertical wind field at 10m */
+	/* load required variables */
+	size_t n_bts = wrf.dimlen(wrf.dimid("bottom_top_stag")); // length of staggered bottom top dimension
 	w = wrf.vardataraw("W");
-	//1) get dimensions
-	//2) malloc w10 (2D + time)
-	//3) interpolate between 0 an 1 level for every pixel and time
-
-	/* calculate relative humidity at 2m (RH, %, 200100.) */
-	check_sfc_memorder(&wrf, "Q2");
+	ph = wrf.vardataraw("PH");
+	phb = wrf.vardataraw("PHB");
 	q2 = wrf.vardataraw("Q2");
-	rh2 = malloc(sizeof(float)*nt*ny*nx);
-	for (long i=0; i<nt; i++) // time dimension loop
-		for (long j=0; j<ny; j++) // south_north dimension loop
-			for (long k=0; k<nx; k++) // west_east dimension loop
-				((float *) rh2)[i*(ny*nx)+j*nx+k] =
-						utils_wrf_rh(((float*)  q2)[i*(ny*nx)+j*nx+k],
-									((float*) psfc)[i*(ny*nx)+j*nx+k],
-									((float*)  t2k)[i*(ny*nx)+j*nx+k]);
 
-//	QuickPlot(ny, nx, t2k);
+	/* calculate staggered and unstaggered pressure level height */
+	z_stag = malloc(sizeof(float)*nt*n_bts*ny*nx);
+	z_unstag = malloc(sizeof(float)*nt*(n_bts-1)*ny*nx);
+	for (long i=0; i<nt; i++) { // time dimension loop
+		for (long j=0; j<n_bts; j++) { // staggered bottom top dimension loop
+			for (long k=0; k<ny; k++)  { // south_north dimension loop
+				for (long l=0; l<nx; l++)  { // west_east dimension loop
+					((float *) z_stag)[i*(n_bts*ny*nx)+j*(ny*nx)+k*nx+l] = // staggered pressure level height
+							(((float *) ph)[i*(n_bts*ny*nx)+j*(ny*nx)+k*nx+l] + // perturbation pressure
+							 ((float *) phb)[i*(n_bts*ny*nx)+j*(ny*nx)+k*nx+l]) // base state pressure
+							 /9.81;
+					if (j > 0) {
+						((float *) z_unstag)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] =
+								(((float *) z_unstag)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] +
+								((float *) z_stag)[i*(n_bts*ny*nx)+j*(ny*nx)+k*nx+l])/2.0;
+					}
+				}
+			}
+		}
+	}
+
+	/* allocate memory for missing variables */
+	w10 = malloc(sizeof(float)*nt*ny*nx);
+	rh2 = malloc(sizeof(float)*nt*ny*nx);
+
+	/* calculate missing variables */
+	for (long i=0; i<nt; i++) { // time dimension loop
+		for (long j=0; j<ny; j++) { // south_north dimension loop
+			for (long k=0; k<nx; k++) { // west_east dimension loop
+
+				/* calculate relative humidity at 2m */
+				((float *) rh2)[i*(ny*nx)+j*nx+k] = // RH		%		200100.
+						calc_rh(((float*)  q2)[i*(ny*nx)+j*nx+k], // water vapor mixing ratio [kg/kg]
+									((float*) psfc)[i*(ny*nx)+j*nx+k], // surface pressure [Pa]
+									((float*)  t2k)[i*(ny*nx)+j*nx+k]);// 2m temperature [K]
+
+				/* calculate vertical wind at 10m */
+				size_t level;
+				for (level=0; level<n_bts; level++) // find interval in which 10m level is included
+					if ((((float*) z_stag)[i*(n_bts*ny*nx)+level*(ny*nx)+j*nx+k]
+							- ((float *) soilhgt)[i*(ny*nx)+j*nx+k]) > 10.0)
+						break;
+
+				if ((level < n_bts-1) and level > 0) { // 10m level is in between
+					((float *) w10)[i*(ny*nx)+j*nx+k] = // W10		m s-1	200100.
+							interpol(((float*) w)[i*(n_bts*ny*nx)+(level-1)*(ny*nx)+j*nx+k],// vertical wind at lower level
+							((float*) w)[i*(n_bts*ny*nx)+level*(ny*nx)+j*nx+k], // vertical wind at higher level
+							(((float*) z_stag)[i*(n_bts*ny*nx)+(level-1)*(ny*nx)+j*nx+k] - ((float *) soilhgt)[i*(ny*nx)+j*nx+k]), // lower level height
+							(((float*) z_stag)[i*(n_bts*ny*nx)+level*(ny*nx)+j*nx+k] - ((float *) soilhgt)[i*(ny*nx)+j*nx+k]), // higher level height
+							10.0); //10m height
+				} else { // 10m level is lower than lowest or higher than highest level
+					((float *) w10)[i*(ny*nx)+j*nx+k] = // W10		m s-1	200100.
+							((float*) w)[i*(n_bts*ny*nx)+(level)*(ny*nx)+j*nx+k]; // use value of lowest/highest level
+				}
+			}
+		}
+	}
+
+	QuickPlot(ny, nx, w10);
 
 	zs = wrf.vardataraw("ZS");
 	smois = wrf.vardataraw("SMOIS");
 	st = wrf.vardataraw("TSLB");
 	isltyp = wrf.vardataraw("ISLTYP");
-
 
 	/*********************
 	 * Print common info *
@@ -151,14 +187,11 @@ int main(int argc, char** argv) {
 	cout << "STAND_LON = " << xlonc << endl;
 	cout << "TRUELAT1 = " << truelat1 << endl;
 	cout << "EARTH_RADIUS = " << eradius << endl;
-	cout << "TIMES[0] = ";
-    for (int i=0; i<19; i++) cout << ((char *)times)[i];
-	cout << endl;
+	cout << "TIMES[0] = " << time2str(Time, 0) << endl;
 	cout << "T2[0,0,0] = " << ((float *)t2k)[0] << endl;
 	cout << "U10[0,0,0] = " << ((float *)u10)[0] << endl;
 	cout << "V10[0,0,0] = " << ((float *)v10)[0] << endl;
-	cout << "W[0,0,0,0] = " << ((float *)w)[0] << endl;
-
+	cout << "RH2[0,0,0] = " << ((float *)rh2)[0] << endl;
 
 	return EXIT_SUCCESS;
 }
