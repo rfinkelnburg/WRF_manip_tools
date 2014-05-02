@@ -73,8 +73,16 @@ float** allocate2D(int ncols, int nrows);
 /* formated print of data in union buf */
 void printvardata(union buf*, size_t*, int, int, long, int);
 
+/* copies char pointer cstr into char pointer str */
+void cp_string(char* str, long nstr, string cstr, long ncstr);
+
 /* writes data set into Intermediate Format Files */
 int write_IFF(ofstream *file, bool endian, struct IFFheader header, struct IFFproj proj, int is_wind_grid_rel, float **data);
+
+/* writes a record into open IFF */
+int write_IFF_record(ofstream *ofile, IFFproj proj, string mapsource,
+		int version, float xfcst, float xlvl, void *Time, long t_idx, long p_idx, long n_plvl,
+		string field, string units, string desc, void* values);
 
 /* Finds minimum value in float array
  * INPUT:

@@ -122,6 +122,27 @@ float** allocate2D(int ncols, int nrows) {
   return dat2;
 }
 
+/* copies char pointer cstr into char pointer str */
+void cp_string(char* str, long nstr, string cstr, long ncstr) {
+	if (ncstr > nstr) {
+		cout << "ABORT: Impcompatible string lengths " << str << " <-> " << cstr << endl;
+		exit(EXIT_FAILURE);
+	}
+	for (long i=0; i<ncstr; i++) str[i] = cstr[i];
+	for (long i=ncstr; i<nstr; i++) str[i] = '\0';
+}
+
+/* converts time char pointer to string time stamp */
+string time2str(void* ch, int n) {
+	string tstr;
+	if (!((char*)ch)[18+n*19]) {
+		printf("ERROR: Time stamp %i not available\n", n);
+		exit(1);
+	}
+	for (int i=0; i<19; i++) tstr += ((char*)ch)[i+n*19];
+    return tstr;
+}
+
 /***********************
  * IFF write proceture *
  ***********************/
@@ -229,6 +250,54 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 		}
 	}
 	i2b(cnt, dummy, endian); ofile->write(dummy,4); // data block end
+
+	return EXIT_SUCCESS;
+}
+
+/* writes a record into open IFF
+ * INPUT:
+ *  ofile		pointer to IFF
+ *  proj		projection information
+ *  mapsource	identifier of data origin
+ *  version		IFF version
+ *  xfcst		forcasting index
+ *  xlvl		pressure level
+ *  Time		WRF time variable
+ *  t_idx		time step index
+ *  p_idx		pressure level index
+ *  n_plvl		number of pressure levels in value array
+ *  field		variable name
+ *  units		variable unit
+ *  dec			variable description
+ *  values		variable values
+ */
+int write_IFF_record(ofstream *ofile, IFFproj proj, string mapsource,
+		int version, float xfcst, float xlvl, void *Time, long t_idx, long p_idx, long n_plvl,
+		string field, string units, string desc, void* values) {
+	bool endian = true;
+	int is_wind_grid_rel = 0;
+	float **data = allocate2D(proj.nx, proj.ny);
+
+	IFFheader header;
+	header.version = version;
+	header.xfcst = xfcst; /* forecast step */
+	header.xlvl = xlvl;
+	cp_string(header.map_source, 33, mapsource.c_str(), strlen(mapsource.c_str())); /* my identifier */
+	cp_string(header.hdate, 25, time2str(Time,t_idx).c_str(), strlen(time2str(Time,t_idx).c_str())); /* current time stamp */
+	cp_string(header.field, 10, field.c_str(), field.size());
+	cp_string(header.units, 26, units.c_str(), units.size());
+	cp_string(header.desc, 47, desc.c_str(), desc.size());
+
+	/* transform data for IFF writing */
+	for (long j=0; j<proj.ny; j++) // south_north dimension loop
+		for (long k=0; k<proj.nx; k++) // west_east dimension loop
+			data[k][j] = ((float *) values)[t_idx*(n_plvl*proj.ny*proj.nx)+p_idx*(proj.ny*proj.nx)+j*proj.nx+k];
+
+	/* write record to file */
+	if (write_IFF(ofile, endian, header, proj, is_wind_grid_rel, data)) {
+		cout << "ABORT: Problem writing " << header.hdate << ", " << header.field << ", " << header.xlvl << endl;
+		return EXIT_FAILURE;
+	}
 
 	return EXIT_SUCCESS;
 }
@@ -375,25 +444,35 @@ float calc_rh(float qv, float p, float t) {
 	return float(calc_rh(double(qv), double(p), double(t)));
 }
 
-/* converts time char pointer to string time stamp */
-string time2str(void* ch, int n) {
-	string tstr;
-	if (!((char*)ch)[18+n*19]) {
-		printf("ERROR: Time stamp %i not available\n", n);
-		exit(1);
-	}
-	for (int i=0; i<19; i++) tstr += ((char*)ch)[i+n*19];
-    return tstr;
-}
-
 /* checks if dimension order of variable is "correct" */
 void check_memorder(WRFncdf *w, string variable, string flag) {
+
+	/* check for ZS variable (2D)*/
+	if ((flag.compare(0,strlen("ZS"),"ZS") == 0) &&
+	   (w->varndims(variable) != 2 ||
+		w->vardims(variable)[0] != w->dimid("Time") ||
+		w->vardims(variable)[1] != w->dimid("soil_layers_stag"))) {
+		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+		exit(EXIT_FAILURE);
+	}
+
 	/* check for surface variable (3D)*/
 	if ((flag.compare(0,strlen("SFC"),"SFC") == 0) &&
 	   (w->varndims(variable) != 3 ||
 		w->vardims(variable)[0] != w->dimid("Time") ||
 		w->vardims(variable)[1] != w->dimid("south_north") ||
 		w->vardims(variable)[2] != w->dimid("west_east"))) {
+		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for soil variable (4D)*/
+	if ((flag.compare(0,strlen("SOILVAR"),"SOILVAR") == 0) &&
+	   (w->varndims(variable) != 4 ||
+		w->vardims(variable)[0] != w->dimid("Time") ||
+		w->vardims(variable)[1] != w->dimid("soil_layers_stag") ||
+		w->vardims(variable)[2] != w->dimid("south_north") ||
+		w->vardims(variable)[3] != w->dimid("west_east"))) {
 		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
 		exit(EXIT_FAILURE);
 	}
