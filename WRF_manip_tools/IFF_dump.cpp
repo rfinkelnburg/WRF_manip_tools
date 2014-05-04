@@ -250,10 +250,12 @@ int main(int argc, char** argv) {
 
 		/* reading data */
 		data = allocate2D(nx, ny);
+		void *data_tmp = malloc(sizeof(float)*nx*ny);
 		file.read(dummy,4);
 		for (int j=0; j<ny; j++) {
 			for (int i=0; i<nx; i++) {
 				file.read(dummy,4); data[i][j] = b2f(dummy, endian);
+				((float *) data_tmp)[j*nx+i] = b2f(dummy, endian);
 			}
 		}
 		file.read(dummy,4);
@@ -262,7 +264,7 @@ int main(int argc, char** argv) {
 		if (found) {
 			cout << "DATA(1,1) = " << data[0][0] << endl;
 			if (f_plot and level == xlvl) { /* plot if requested */
-				QuickPlot(nx, ny, data);
+				QuickPlot_rot(nx, ny, data_tmp, 0);
 			}
 		}
 

@@ -436,8 +436,9 @@ double calc_rh(double qv, double p, double t) {
 	double ES = 10.0 * SVP1 * exp(SVP2 * (t-SVPT0)/(t-SVP3));
 	double QVS = EP_3 * ES / (0.01 * p - ((1.0 - EP_3) * ES));
 
-	if (qv/QVS < 1.0) return 100.0 * (qv/QVS);
-	else return 100.0;
+	if (qv/QVS < 1.0 and qv/QVS > 0.0) return 100.0 * (qv/QVS);
+	if (qv/QVS < 0.0) return 0.0;
+	return 100.0;
 }
 
 float calc_rh(float qv, float p, float t) {
@@ -452,7 +453,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 	   (w->varndims(variable) != 2 ||
 		w->vardims(variable)[0] != w->dimid("Time") ||
 		w->vardims(variable)[1] != w->dimid("soil_layers_stag"))) {
-		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
 		exit(EXIT_FAILURE);
 	}
 
@@ -462,7 +463,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 		w->vardims(variable)[0] != w->dimid("Time") ||
 		w->vardims(variable)[1] != w->dimid("south_north") ||
 		w->vardims(variable)[2] != w->dimid("west_east"))) {
-		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
 		exit(EXIT_FAILURE);
 	}
 
@@ -473,7 +474,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 		w->vardims(variable)[1] != w->dimid("soil_layers_stag") ||
 		w->vardims(variable)[2] != w->dimid("south_north") ||
 		w->vardims(variable)[3] != w->dimid("west_east"))) {
-		printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
 		exit(EXIT_FAILURE);
 	}
 
@@ -484,7 +485,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[1] != w->dimid("bottom_top") ||
 			w->vardims(variable)[2] != w->dimid("south_north") ||
 			w->vardims(variable)[3] != w->dimid("west_east"))) {
-			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
 			exit(EXIT_FAILURE);
 	}
 
@@ -495,7 +496,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[1] != w->dimid("bottom_top_stag") ||
 			w->vardims(variable)[2] != w->dimid("south_north") ||
 			w->vardims(variable)[3] != w->dimid("west_east"))) {
-			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			printf("ABORT: Memory order of %s not compatible\n!", variable.c_str());
 			exit(EXIT_FAILURE);
 	}
 
@@ -506,7 +507,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[1] != w->dimid("bottom_top") ||
 			w->vardims(variable)[2] != w->dimid("south_north_stag") ||
 			w->vardims(variable)[3] != w->dimid("west_east"))) {
-			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
 			exit(EXIT_FAILURE);
 	}
 
@@ -517,7 +518,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[1] != w->dimid("bottom_top") ||
 			w->vardims(variable)[2] != w->dimid("south_north") ||
 			w->vardims(variable)[3] != w->dimid("west_east_stag"))) {
-			printf("ABORT: Memory order of %s not compatible!", variable.c_str());
+			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
 			exit(EXIT_FAILURE);
 	}
 }

@@ -38,8 +38,8 @@ int main(int argc, char** argv) {
 												   */
 	size_t nx, ny, nt, nsoil;
 	string ifilename, opath;
-	void *Time, *t2k, *u10, *v10, *w, *w10, *psfc, *q2, *rh2, *zs, *smois, *st, *seaice, *isltyp,
-		 *soilhgt, *skintemp, *snow, *snowh, *sst, *ph, *phb, *z_stag, *z_unstag, *landsea,
+	void *Time, *t2k, *u10, *v10, *u, *v, *w, *w10, *psfc, *q2, *rh2, *zs, *smois, *st, *seaice, *isltyp,
+		 *soilhgt, *skintemp, *snow, *snowh, *sst, *ph, *phb, *z_stag, *z_unstag, *u_unstag, *v_unstag, *w_unstag, *landsea,
 		 *sm000010, *sm010040, *sm040100, *sm100200, *st000010, *st010040, *st040100, *st100200;
 	IFFproj proj;
 
@@ -122,6 +122,8 @@ int main(int argc, char** argv) {
 	check_memorder(&wrf, "ZS", "ZS");
 	check_memorder(&wrf, "SMOIS", "SOILVAR");
 	check_memorder(&wrf, "TSLB", "SOILVAR");
+	check_memorder(&wrf, "U", "WE_STAG");
+	check_memorder(&wrf, "V", "NS_STAG");
 
 	/* check number and depth of soil layers */
 	zs = wrf.vardataraw("ZS");
@@ -147,13 +149,19 @@ int main(int argc, char** argv) {
 	phb = wrf.vardataraw("PHB");
 	q2 = wrf.vardataraw("Q2");
 	isltyp = wrf.vardataraw("ISLTYP");
+	u = wrf.vardataraw("W");
+	v = wrf.vardataraw("W");
 	w = wrf.vardataraw("W");
 	smois = wrf.vardataraw("SMOIS");
 	st = wrf.vardataraw("TSLB");
 
-	/* calculate staggered and unstaggered pressure level height */
+	/* calculate staggered and unstaggered pressure level height and wind */
 	z_stag = malloc(sizeof(float)*nt*n_bts*ny*nx);
 	z_unstag = malloc(sizeof(float)*nt*(n_bts-1)*ny*nx);
+	u_unstag = malloc(sizeof(float)*nt*(n_bts-1)*ny*nx);
+	v_unstag = malloc(sizeof(float)*nt*(n_bts-1)*ny*nx);
+	w_unstag = malloc(sizeof(float)*nt*(n_bts-1)*ny*nx);
+
 	for (long i=0; i<nt; i++) { // time dimension loop
 		for (long j=0; j<n_bts; j++) { // staggered bottom top dimension loop
 			for (long k=0; k<ny; k++)  { // south_north dimension loop
@@ -166,6 +174,18 @@ int main(int argc, char** argv) {
 						((float *) z_unstag)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] =
 								(((float *) z_unstag)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] +
 								((float *) z_stag)[i*(n_bts*ny*nx)+j*(ny*nx)+k*nx+l])/2.0;
+
+						((float *) u_unstag)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] =
+								(((float *) u)[i*((n_bts-1)*ny*(nx+1))+(j-1)*(ny*(nx+1))+k*(nx+1)+l] +
+								 ((float *) u)[i*((n_bts-1)*ny*(nx+1))+(j-1)*(ny*(nx+1))+k*(nx+1)+l+1])/2.0;
+
+						((float *) v_unstag)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] =
+								(((float *) v)[i*((n_bts-1)*(ny+1)*nx)+(j-1)*((ny+1)*nx)+k*nx+l] +
+								 ((float *) v)[i*((n_bts-1)*(ny+1)*nx)+(j-1)*((ny+1)*nx)+(k+1)*nx+l])/2.0;
+
+						((float *) w_unstag)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] =
+								(((float *) w)[i*((n_bts-1)*ny*nx)+(j-1)*(ny*nx)+k*nx+l] +
+								((float *) w)[i*(n_bts*ny*nx)+j*(ny*nx)+k*nx+l])/2.0;
 					}
 				}
 			}
@@ -197,8 +217,8 @@ int main(int argc, char** argv) {
 									((float*)  t2k)[i*(ny*nx)+j*nx+k]);// 2m temperature [K]
 
 				/* extract land sea flag */
-				if (((((int*) isltyp)[i*(ny*nx)+j*nx+k]) == 14) || //TODO: Sea ice problem
-					((((int*) isltyp)[i*(ny*nx)+j*nx+k]) == 16))
+				if (((((int*) isltyp)[i*(ny*nx)+j*nx+k]) == 14) ||
+					((((int*) isltyp)[i*(ny*nx)+j*nx+k]) == 16)) // a bit hacky (seems that 16 is not always sea ice)
 					  ((float *) landsea)[i*(ny*nx)+j*nx+k] = 0.0; // land sea flag		proprtn		200100.
 				else ((float *) landsea)[i*(ny*nx)+j*nx+k] = 1.0;
 
@@ -243,11 +263,171 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	//TODO: proceed pressure levels...
+	/**************************************
+	 * calculate pressure level variables *
+	 **************************************/
 
-	/*********************
-	 * Print common info *
-	 *********************/
+	/*!!! PH, PHB, U, V, W and Z already loaded (see above) !!! */
+
+	/* check memory order of required variables */
+	size_t n_btu = wrf.dimlen(wrf.dimid("bottom_top")); // length of unstaggered bottom top dimension
+	check_memorder(&wrf, "T", "UNSTAG");
+	check_memorder(&wrf, "QVAPOR", "UNSTAG");
+	check_memorder(&wrf, "P", "UNSTAG");
+	check_memorder(&wrf, "PB", "UNSTAG");
+
+	/* set output pressure level variables */
+	long n_plvl = 26;
+	float plvl[26] = {100000.0, 97500.0, 95000.0, 92500.0, 90000.0, 85000.0, 80000.0, 75000.0, 70000.0, 65000.0, 60000.0, 55000.0, 50000.0,
+			45000.0, 40000.0, 35000.0, 30000.0, 25000.0, 20000.0, 15000.0, 10000.0, 7000.0, 5000.0, 3000.0, 2000.0, 1000.0}; // output pressure levels
+
+	void *tt_press = malloc(sizeof(float)*nt*n_plvl*ny*nx);
+	void *rh_press = malloc(sizeof(float)*nt*n_plvl*ny*nx);
+	void *uu_press = malloc(sizeof(float)*nt*n_plvl*ny*nx);
+	void *vv_press = malloc(sizeof(float)*nt*n_plvl*ny*nx);
+	void *ww_press = malloc(sizeof(float)*nt*n_plvl*ny*nx);
+	void *ght_press = malloc(sizeof(float)*nt*n_plvl*ny*nx);
+
+	/* read sigma level variables from input file */
+	void *p = wrf.vardataraw("P");
+	void *pb = wrf.vardataraw("PB");
+	void *t = wrf.vardataraw("T");
+	void *qvapor = wrf.vardataraw("QVAPOR");
+
+	/* calculated values for every pressure level */
+	for (long p_i=0; p_i<n_plvl; p_i++) {
+		/** UNSTAGGERD variables (T, QVAPOR, P, PB) (z_unstag was already calculated, see above)
+		 ** WEST EAST STAGGERD variables (U) (u_unstag was already calculated, see above)
+		 ** SOUTH NORTH STAGGERD variables (V) (v_unstag was already calculated, see above)
+		 ** BOTTOM TOP STAGGERD variables (W) (w_unstag was already calculated, see above)
+		 **/
+		for (long i=0; i<nt; i++) { // time dimension loop
+			for (long j=0; j<ny; j++) { // south_north dimension loop
+				for (long k=0; k<nx; k++) { // west_east dimension loop
+
+					/* find unstaggered pressure interval for interpolation... */
+					long level;
+					for (level=0; level<n_btu; level++) { // pressure of sigma level is P+PB
+						if ((((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] +
+							 ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]) < plvl[p_i]) break;
+					}
+
+					if ((level < n_btu-1) and level > 0) { /*** interpolate between found levels ***/
+						/* calculate temperature for current pressure level (why ever, add 300.0 K base temperature (see NCL)) */
+						((float*) tt_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] = // TT field
+							interpol(((float*) t)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k], // higher level temperature
+									((float*) t)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k], // lower level temperature
+									(((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), //higher level pressure
+									(((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]), //lower level pressure
+									plvl[p_i])+300.0; //pressure level pressure
+
+						/* calculate height for current pressure level  */
+						((float*) ght_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] = // GHT field
+							interpol(((float*) z_unstag)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k], // higher level altitude
+									((float*) z_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k], // lower level altitude
+									(((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), //higher level pressure
+									(((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]), //lower level pressure
+									plvl[p_i]); //pressure level pressure
+
+						/* calculate relative humidity for current pressure level  */
+						((float*) rh_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] = // GHT field
+							interpol(calc_rh(((float*)  qvapor)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k], // higher level water vapor mixing ratio [kg/kg]
+										(((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), // higher level pressure [Pa]
+										float(((float*) t)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]+300.0)), // higher level temperature [K]
+									calc_rh(((float*)  qvapor)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k], // lower level water vapor mixing ratio [kg/kg]
+										(((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), // surface pressure [Pa]
+										float(((float*) t)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]+300.0)),
+									(((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), //higher level pressure
+									(((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]), //lower level pressure
+									plvl[p_i]); //pressure level pressure
+
+						/* calculate u wind vector for current pressure level  */
+						((float*) uu_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] = // TT field
+							interpol(((float*) u_unstag)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k], // higher level temperature
+									((float*) u_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k], // lower level temperature
+									(((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), //higher level pressure
+									(((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]), //lower level pressure
+									plvl[p_i]); //pressure level pressure
+
+						/* calculate v wind vector for current pressure level  */
+						((float*) vv_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] = // TT field
+							interpol(((float*) v_unstag)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k], // higher level temperature
+									((float*) v_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k], // lower level temperature
+									(((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), //higher level pressure
+									(((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]), //lower level pressure
+									plvl[p_i]); //pressure level pressure
+
+						/* calculate vertical wind for current pressure level  */
+						((float*) ww_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] = // TT field
+							interpol(((float*) w_unstag)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k], // higher level temperature
+									((float*) w_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k], // lower level temperature
+									(((float*) p)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+level*(ny*nx)+j*nx+k]), //higher level pressure
+									(((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]), //lower level pressure
+									plvl[p_i]); //pressure level pressure
+					} else {
+						if (level <= 0) { /*** take value of lowest level ***/
+							/* calculate temperature for current pressure level (why ever, add 300.0 K base temperature (see NCL)) */
+							((float*) tt_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) t)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k]+300.0;
+
+							/* calculate height for current pressure level */
+							((float*) ght_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) z_unstag)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k];
+
+							/* calculate relative humidity for current pressure level */
+							((float*) rh_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+							  calc_rh(((float*) qvapor)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k], // water vapor mixing ratio [kg/kg]
+									  (((float*) p)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k]), // pressure [Pa]
+									  float(((float*) t)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k]+300.0)); // temperature [K]
+
+							/* calculate u wind vector for current pressure level  */
+							((float*) uu_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) u_unstag)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k];
+
+							/* calculate v wind vector for current pressure level  */
+							((float*) vv_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) v_unstag)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k];
+
+							/* calculate vertical wind for current pressure level  */
+							((float*) ww_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) w_unstag)[i*(n_btu*ny*nx)+0*(ny*nx)+j*nx+k];
+						} else {/*** take value of highest level ***/
+							/* calculate temperature for current pressure level (why ever, add 300.0 K base temperature (see NCL)) */
+							((float*) tt_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) t)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]+300.0;
+
+							/* calculate height for current pressure level  */
+							((float*) ght_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) z_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k];
+
+							/* calculate relative humidity for current pressure level */
+							((float*) rh_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+							  calc_rh(((float*) qvapor)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k], // water vapor mixing ratio [kg/kg]
+									  (((float*) p)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k] + ((float *) pb)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]), // pressure [Pa]
+									  float(((float*) t)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k]+300.0)); // temperature [K]
+
+							/* calculate u wind vector for current pressure level  */
+							((float*) uu_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) u_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k];
+
+							/* calculate v wind vector for current pressure level  */
+							((float*) vv_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) v_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k];
+
+							/* calculate vertical wind for current pressure level  */
+							((float*) ww_press)[i*(n_plvl*ny*nx)+p_i*(ny*nx)+j*nx+k] =
+								((float*) w_unstag)[i*(n_btu*ny*nx)+(level-1)*(ny*nx)+j*nx+k];
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/*******************
+	 * Print some info *
+	 *******************/
+
 	cout << "MAP_PROJ = " << proj.iproj << endl;
 	cout << "DX = " << proj.dx << ", DY = " << proj.dy << endl;
 	cout << "STARTLOC = " << proj.startloc << endl;
@@ -416,6 +596,44 @@ int main(int argc, char** argv) {
 		/******************************
 		 * Writing pressure variables *
 		 ******************************/
+
+		for (long pi=0; pi<n_plvl; pi++) {
+			/* writing pressure level temperature */
+			if (write_IFF_record(&ofile, proj, mapsource, 5, 0.0, plvl[pi], Time, i, pi, n_plvl, "TT", "K", "Temperature", tt_press)) {
+				cout << "Error writing record: " << "TT" << '\n';
+				return EXIT_FAILURE;
+			}
+
+			/* writing pressure level vertical wind */
+			if (write_IFF_record(&ofile, proj, mapsource, 5, 0.0, plvl[pi], Time, i, pi, n_plvl, "UU", "m s-1", "U", uu_press)) {
+				cout << "Error writing record: " << "UU" << '\n';
+				return EXIT_FAILURE;
+			}
+
+			/* writing pressure level vertical wind */
+			if (write_IFF_record(&ofile, proj, mapsource, 5, 0.0, plvl[pi], Time, i, pi, n_plvl, "VV", "m s-1", "V", vv_press)) {
+				cout << "Error writing record: " << "VV" << '\n';
+				return EXIT_FAILURE;
+			}
+
+			/* writing pressure level vertical wind */
+			if (write_IFF_record(&ofile, proj, mapsource, 5, 0.0, plvl[pi], Time, i, pi, n_plvl, "WW", "m s-1", "W", ww_press)) {
+				cout << "Error writing record: " << "WW" << '\n';
+				return EXIT_FAILURE;
+			}
+
+			/* writing pressure level relative humidity */
+			if (write_IFF_record(&ofile, proj, mapsource, 5, 0.0, plvl[pi], Time, i, pi, n_plvl, "RH", "%", "Relative Humidity", rh_press)) {
+				cout << "Error writing record: " << "RH" << '\n';
+				return EXIT_FAILURE;
+			}
+
+			/* writing pressure level height */
+			if (write_IFF_record(&ofile, proj, mapsource, 5, 0.0, plvl[pi], Time, i, pi, n_plvl, "GHT", "m", "Height", ght_press)) {
+				cout << "Error writing record: " << "GHT" << '\n';
+				return EXIT_FAILURE;
+			}
+		}
 
 		ofile.close();
 	}
