@@ -127,11 +127,21 @@ float interpol(float val1, float val2, float idx1, float idx2, float idx_res);
  * Calculates relative humidity from WRF output.
  * INPUT:
  * 	qv	Water vapor mixing ratio [kg/kg]
- * 	p	Full pressure (perutrbation + base state pressure [Pa]
+ * 	p	Full pressure (perturbation + base state pressure) [Pa]
  * 	t	Temperature [K]
  */
 double calc_rh(double qv,double p, double t);
 float calc_rh(float qv, float p, float t);
+
+
+/*
+ * Calculates temperature in [K] from WRF temperature.
+ * INPUT:
+ *  p		Full pressure (perturbation + base state pressure) [Pa]
+ *  theta	Potential temperature (i.e., perturbation + reference temperature)
+ *  		with the same dimension as p. Units must be [K].
+ */
+float calc_tk(float p, float theta);
 
 /*
  * Converts time char pointer to string time stamp.

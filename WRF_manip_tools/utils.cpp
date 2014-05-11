@@ -388,31 +388,17 @@ float minmax(size_t len, float *vec, float *maxval) {
 /* Interpolates between to float values.
  * val1		float value at index 1 (idx1)
  * val2 	float value at index 2 (idx2)
- * idx_res	index of requested value
+ * idx3		index of requested value
  */
-float interpol(float val1, float val2, float idx1, float idx2, float idx_res) {
-	float idx_1, idx_2, val_1, val_2, f_idx;
-	if (idx1 > idx2) {
-		idx_1 = idx2;
-		val_1 = val2;
-		idx_2 = idx1;
-		val_2 = val1;
-	} else {
-		idx_1 = idx1;
-		val_1 = val1;
-		idx_2 = idx2;
-		val_2 = val2;
+float interpol(float val1, float val2, float idx1, float idx2, float idx3) {
+	if (idx1 == idx2) {
+		return val1;
 	}
 
-	if (idx_res <= idx_1) return val_1;
-	if (idx_res >= idx_2) return val_2;
+	float m = ((val2-val1)/(idx2-idx1));
+	float n = val1 - (m*idx1);
 
-	f_idx = (idx_res-idx_1) / (idx_2-idx_1);
-
-//	cout << val1 << " (" << idx1 << "), " << val2 << " (" << idx2 <<") -> "
-//	     << val_1*(1.0-f_idx) + val_2*f_idx << " (" << idx_res << ")\n";
-
-	return val_1*(1.0-f_idx) + val_2*f_idx;
+	return m*idx3+n;
 }
 
 /* Calculates relative humidity from WRF output.
@@ -445,8 +431,26 @@ float calc_rh(float qv, float p, float t) {
 	return float(calc_rh(double(qv), double(p), double(t)));
 }
 
+/* calculates temperature in K from WRF temperature */
+float calc_tk(float p, float theta) {
+	float P1000MB = 100000.0;
+	float R_D = 287.04;
+	float CP = 7.0 * R_D / 2.0;
+	float PI = pow((p / P1000MB),(R_D/CP));
+	return PI*theta;
+}
+
 /* checks if dimension order of variable is "correct" */
 void check_memorder(WRFncdf *w, string variable, string flag) {
+
+	/* check for ZS variable (2D)*/
+	if ((flag.compare(0,strlen("1DZS"),"1DZS") == 0) &&
+	   (w->varndims(variable) != 1 ||
+		w->vardims(variable)[0] != w->dimid("soil_layers_stag"))) {
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
+		exit(EXIT_FAILURE);
+	}
 
 	/* check for ZS variable (2D)*/
 	if ((flag.compare(0,strlen("ZS"),"ZS") == 0) &&
@@ -454,6 +458,18 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 		w->vardims(variable)[0] != w->dimid("Time") ||
 		w->vardims(variable)[1] != w->dimid("soil_layers_stag"))) {
 		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for surface variable (2D)*/
+	if ((flag.compare(0,strlen("2D"),"2D") == 0) &&
+	   (w->varndims(variable) != 2 ||
+		w->vardims(variable)[0] != w->dimid("south_north") ||
+		w->vardims(variable)[1] != w->dimid("west_east"))) {
+		printf("SFC2D!\n");
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
 		exit(EXIT_FAILURE);
 	}
 
@@ -464,6 +480,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 		w->vardims(variable)[1] != w->dimid("south_north") ||
 		w->vardims(variable)[2] != w->dimid("west_east"))) {
 		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
 		exit(EXIT_FAILURE);
 	}
 
@@ -475,6 +492,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 		w->vardims(variable)[2] != w->dimid("south_north") ||
 		w->vardims(variable)[3] != w->dimid("west_east"))) {
 		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
 		exit(EXIT_FAILURE);
 	}
 
@@ -486,6 +504,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[2] != w->dimid("south_north") ||
 			w->vardims(variable)[3] != w->dimid("west_east"))) {
 			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
 			exit(EXIT_FAILURE);
 	}
 
@@ -497,6 +516,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[2] != w->dimid("south_north") ||
 			w->vardims(variable)[3] != w->dimid("west_east"))) {
 			printf("ABORT: Memory order of %s not compatible\n!", variable.c_str());
+			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
 			exit(EXIT_FAILURE);
 	}
 
@@ -508,6 +528,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[2] != w->dimid("south_north_stag") ||
 			w->vardims(variable)[3] != w->dimid("west_east"))) {
 			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
 			exit(EXIT_FAILURE);
 	}
 
@@ -519,6 +540,7 @@ void check_memorder(WRFncdf *w, string variable, string flag) {
 			w->vardims(variable)[2] != w->dimid("south_north") ||
 			w->vardims(variable)[3] != w->dimid("west_east_stag"))) {
 			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
 			exit(EXIT_FAILURE);
 	}
 }
