@@ -176,6 +176,8 @@ class WRFncdf {
    string getformatstr(void); //returns currant format as string
    string getname(void); //get name of current WRF file
    int getstat(void); //get current status
+   string gettypename(nc_type); // returns data type string
+
 
    /* dimension methods */
    int ndims(void); // returns number of dims

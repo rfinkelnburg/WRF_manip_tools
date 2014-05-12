@@ -705,6 +705,27 @@ int WRFncdf::getstat(void) {
 	return this->stat;
 }
 
+/* returns data type string
+ * INPUT:	type_id		type id
+ */
+string WRFncdf::gettypename(nc_type type_id) {
+	string VAR_TYPE[13] = { "nat",    /* NAT = 'Not A Type' (c.f. NaN) */
+							"byte",   /* signed 1 byte integer */
+							"char",   /* ISO/ASCII character */
+							"short",  /* signed 2 byte integer */
+							"int",    /* signed 4 byte integer */
+							"float",  /* single precision floating point number */
+							"double", /* double precision floating point number */
+							"ubyte",  /* unsigned 1 byte int */
+							"ushort", /* unsigned 2-byte int */
+							"uint",   /* unsigned 4-byte int */
+							"int64",  /* signed 8-byte int */
+							"uint64", /* unsigned 8-byte int */
+							"string"};/* string */
+
+	return VAR_TYPE[type_id];
+}
+
 /* returns number of dims */
 int WRFncdf::ndims(void) {
 	return this->dims;
@@ -858,7 +879,7 @@ size_t WRFncdf::gattlen(int attid) {
 
 /* returns gloabal att value as union */
 WRFattval WRFncdf::gattval(int attid) {
-	return this->attval(-1,attid);
+	return this->attval(NC_GLOBAL,attid);
 }
 
 /* returns value of a variable attribute as string
@@ -866,10 +887,23 @@ WRFattval WRFncdf::gattval(int attid) {
  * 			attid	attribute id
  */
 string WRFncdf::attvalstr(int varid, int attid) {
-	char strval[NC_MAX_NAME];
+	size_t attlen;
 	int ok;
 
-	for (int i = 0; i < NC_MAX_NAME; i++) strval[i] = '\0'; // init string
+	/* get number of attribute values */
+	this->stat = nc_inq_attlen(this->igrp, varid, this->attname(varid, attid).c_str(), &attlen);
+	WRFCHECK(this->stat, nc_inq_attlen);
+
+	if ((attlen != 1) and (this->atttype(varid, attid) != 2)) {
+		cout << "ABORT: Attribute arrays not supported for " << this->gettypename(this->atttype(varid, attid)) << endl;
+	}
+
+	if (this->atttype(varid, attid) != 2) attlen = NC_MAX_NAME;
+
+	/* allocate char pointer */
+	char strval[attlen+1];
+
+	for (int i = 0; i <= attlen; i++) strval[i] = '\0'; // init string
 
 	switch (this->atttype(varid, attid)) {
 	case 2: /* ISO/ASCII character */
@@ -911,7 +945,7 @@ string WRFncdf::attvalstr(string vname, int attid) {
  * INPUT:	attid	attribute id
  */
 string WRFncdf::gattvalstr(int attid) {
-	return this->attvalstr(-1, attid);
+	return this->attvalstr(NC_GLOBAL, attid);
 }
 
 /* returns data type id of variable
@@ -924,25 +958,12 @@ int WRFncdf::vartype(int varid) {
 int WRFncdf::vartype(string vname) {
 	return this->vartype(this->varid(vname));
 }
+
 /* returns data type of variable as string
  * INPUT:	varid	variable id
  */
 string WRFncdf::vartypename(int varid) {
-	string VAR_TYPE[13] = { "nat",    /* NAT = 'Not A Type' (c.f. NaN) */
-							"byte",   /* signed 1 byte integer */
-							"char",   /* ISO/ASCII character */
-							"short",  /* signed 2 byte integer */
-							"int",    /* signed 4 byte integer */
-							"float",  /* single precision floating point number */
-							"double", /* double precision floating point number */
-							"ubyte",  /* unsigned 1 byte int */
-							"ushort", /* unsigned 2-byte int */
-							"uint",   /* unsigned 4-byte int */
-							"int64",  /* signed 8-byte int */
-							"uint64", /* unsigned 8-byte int */
-							"string"};/* string */
-
-	return VAR_TYPE[this->vartypes[varid]];
+	return this->gettypename(this->vartypes[varid]);
 }
 
 /* returns data type of variable as string
