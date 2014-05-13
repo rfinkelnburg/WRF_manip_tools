@@ -7,28 +7,12 @@
  * Description: This tool dumps/displays the content of WRF output files.
  */
 
-#include <stdio.h>
 #include <cstdlib>
-#include <string>
-#include <cstring>
 #include <cstdio>
-/* Full documentation of the netCDF C++ API can be found at:
- * http://www.unidata.ucar.edu/software/netcdf/docs/netcdf-cxx
- */
-#include "QuickPlot.h"
-#include "utils.h"
+#include <cstring>
+#include "libwrf.h"
 
 using namespace std;
-
-/* check the netcdf error codes */
-void check(int err, const char* fcn, const char* file, const int line) {
-    fprintf(stderr,"%s\n",nc_strerror(err));
-    fprintf(stderr,"Location: function %s; file %s; line %d\n",
-	    fcn,file,line);
-    fflush(stderr); fflush(stdout);
-    exit(1);
-}
-#define CHECK(stat,f) if(stat != NC_NOERR) {check(stat,#f,__FILE__,__LINE__);} else {}
 
 /* print help text */
 void print_help(void) {

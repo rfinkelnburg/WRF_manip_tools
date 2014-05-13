@@ -7,5 +7,5 @@ Installing on Debian / Ubuntu
 =============================
 
     $ sudo apt-get install libqwt-dev libnetcdf-dev
-    $ cd QuickPlot; qmake; make clean; make; cd ..
-    $ cd WRF_manip_tools; make clean; make; cd ..
+    $ cd QuickPlot; ./install.sh; cd ..
+    $ cd WRF_manip_tools; ./install.sh 

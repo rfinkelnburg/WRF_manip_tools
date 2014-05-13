@@ -1,51 +1,23 @@
 /*
- * utils.h
+ * libwrf.h
  *
- *  Created on: Mar 17, 2014
+ *  Created on: Mai 13, 2014
  *      Author: Roman Finkelnburg
  *   Copyright: Roman Finkelnburg (2014)
- * Description: Utilities used by WRF_manip_tools.
+ * Description: NetCDF specific utilities used by WRF_manip_tools.
  */
 
-#ifndef UTILS_H_
-#define UTILS_H_
+#ifndef LIBWRF_H_
+#define LIBWRF_H_
 
-#include <fstream>
-#include <netcdf.h>
-#include <netcdfcpp.h>
+#include <string>
 #include <vector>
-#include <math.h>
+#include <netcdf.h>
+/* Full documentation of the netCDF C++ API can be found at:
+ * http://www.unidata.ucar.edu/software/netcdf/docs/netcdf-cxx
+ */
 
 using namespace std;
-
-typedef char byte;
-
-struct IFFheader {
-	int version;
-	char hdate[25];
-	float xfcst;
-	char map_source[33];
-	char field[10];
-	char units[26];
-	char desc[47];
-	float xlvl;
-};
-
-struct IFFproj {
-	int iproj, nx, ny, nlats;
-	char startloc[9];
-	float startlat, startlon, deltalat, deltalon, dx, dy, xlonc, truelat1, truelat2, earth_radius;
-};
-
-/* union for data type conversion */
-union buf{
-	char *c;
-	short int *s;
-	int *i;
-	float *f;
-	double *d;
-	void *v;
-};
 
 union WRFattval {
 	int i;
@@ -54,102 +26,6 @@ union WRFattval {
 	double d;
 	long long ll;
 };
-
-/* converts 4 Byte array into integer */
-int b2i(byte b[4], bool endian);
-
-/* converts integer into 4 Byte array */
-void i2b(int i, byte b[4], bool endian);
-
-/* converts 4 Byte array into float */
-float b2f(byte b[4], bool endian);
-
-/* converts float into 4 Byte array */
-void f2b(float f, byte b[4], bool endian);
-
-/* allocates a 2D float array */
-float** allocate2D(int ncols, int nrows);
-
-/* formated print of data in union buf */
-void printvardata(union buf*, size_t*, int, int, long, int);
-
-/* copies char pointer cstr into char pointer str */
-void cp_string(char* str, long nstr, string cstr, long ncstr);
-
-/* writes data set into Intermediate Format Files */
-int write_IFF(ofstream *file, bool endian, struct IFFheader header, struct IFFproj proj, int is_wind_grid_rel, float **data);
-
-/* writes a record into open IFF */
-int write_IFF_record(ofstream *ofile, IFFproj proj, string mapsource,
-		int version, float xfcst, float xlvl, void *Time, long t_idx, long p_idx, long n_plvl,
-		string field, string units, string desc, void* values);
-
-/* Finds minimum value in float array
- * INPUT:
- * 	len	number of array elements
- * 	vec	float array
- * OUTPUT:
- * 	pos	index of minimum value in array
- */
-float min(size_t len, float *vec, size_t *pos);
-float min(size_t len, float *vec);
-
-/* Finds maximum value in float array
- * INPUT:
- * 	len	number of array elements
- * 	vec	float array
- * OUTPUT:
- * 	pos	index of maximum value in array
- */
-float max(size_t len, float *vec, size_t *pos);
-float max(size_t len, float *vec);
-
-/* Finds minimum and maximum value in float array
- * INPUT:
- * 	len	number of array elements
- * 	vec	float array
- * OUTPUT:
- * 	max		maximum value in array
- * 	minpos	index of maximum value in array
- * 	maxpos	index of maximum value in array
- */
-float minmax(size_t len, float *vec, float *maxval, size_t *minpos, size_t *maxpos);
-float minmax(size_t len, float *vec, float *maxval);
-
-/* Interpolates between to float values.
- * val1		float value at index 1 (idx1)
- * val2 	float value at index 2 (idx2)
- * idx_res	index of requested value
- */
-float interpol(float val1, float val2, float idx1, float idx2, float idx_res);
-
-/*
- * Calculates relative humidity from WRF output.
- * INPUT:
- * 	qv	Water vapor mixing ratio [kg/kg]
- * 	p	Full pressure (perturbation + base state pressure) [Pa]
- * 	t	Temperature [K]
- */
-double calc_rh(double qv,double p, double t);
-float calc_rh(float qv, float p, float t);
-
-
-/*
- * Calculates temperature in [K] from WRF temperature.
- * INPUT:
- *  p		Full pressure (perturbation + base state pressure) [Pa]
- *  theta	Potential temperature (i.e., perturbation + reference temperature)
- *  		with the same dimension as p. Units must be [K].
- */
-float calc_tk(float p, float theta);
-
-/*
- * Converts time char pointer to string time stamp.
- * INPUT:
- *  ch	char pointer to beginning of time stamp
- *  n	number of time stamp element
- */
-string time2str(void* ch, int n);
 
 class WRFncdf {
 	string filename;
@@ -255,20 +131,20 @@ class WRFncdf {
    /* fill variable data */
    void putdata(int, void *);
    void putdata(int, size_t *, size_t *, void *, int);
+
+   /*
+    * Checks if dimension order of variable is "correct".
+    * INPUT:
+    * 	variable	name of variable
+    * 	flag		expected memory order
+    * 				"SFC" for time dependent surface variables (3D)
+    * 				"UNSTAG" for unstaggered variable (4D)
+    * 				"BT_STAG" for bottom top staggered variable (4D)
+    * 				"NS_STAG" for north south staggered variable (4D)
+    * 				"WE_STAG" for west east staggered variable (4D)
+    */
+   void check_memorder(string variable, string flag);
+
 };
 
-/*
- * Checks if dimension order of variable is "correct".
- * INPUT:
- * 	w			pointer to wrf file object
- * 	variable	name of variable
- * 	flag		expected memory order
- * 				"SFC" for time dependent surface variables (3D)
- * 				"UNSTAG" for unstaggered variable (4D)
- * 				"BT_STAG" for bottom top staggered variable (4D)
- * 				"NS_STAG" for north south staggered variable (4D)
- * 				"WE_STAG" for west east staggered variable (4D)
- */
-void check_memorder(WRFncdf *w, string variable, string flag);
-
-#endif /* UTILS_H_ */
+#endif /* LIBWRF_H_ */

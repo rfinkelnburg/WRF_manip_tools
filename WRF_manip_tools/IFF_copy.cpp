@@ -8,13 +8,10 @@
  *              for testing if I/O formatting is correct)
  */
 
-#include <stdio.h>
 #include <cstdlib>
-#include <string>
-#include <cstdio>
 #include <iostream>
-#include <fstream>
-#include "utils.h"
+#include <libutils.h>
+#include "libiff.h"
 
 using namespace std;
 

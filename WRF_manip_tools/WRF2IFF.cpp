@@ -8,16 +8,12 @@
  */
 
 #include <cstdlib>
-#include <string>
 #include <cstring>
 #include <iostream>
-#include <cstdio>
-#include <cmath>
-/* Full documentation of the netCDF C++ API can be found at:
- * http://www.unidata.ucar.edu/software/netcdf/docs/netcdf-cxx
- */
-#include "QuickPlot.h"
-#include "utils.h"
+#include <math.h>
+#include "libutils.h"
+#include "libiff.h"
+#include "libwrf.h"
 
 using namespace std;
 
@@ -35,7 +31,7 @@ int main(int argc, char** argv) {
 		 *soilhgt, *skintemp, *snow, *snowh, *sst, *ph, *phb, *ght_stag, *ght_unstag, *u_unstag, *v_unstag, *w_unstag, *landsea,
 		 *sm000010, *sm010040, *sm040100, *sm100200, *st000010, *st010040, *st040100, *st100200;
 	IFFproj proj;
-	int *dummy;
+	int dummy;
 	string mapsource = string("WRF SVLPP D07 V1");/* your own identifier to be set in IFF
 												   * EXAMPLE:        "WRF SVLPP D07 V1"
 												   *				  ^   ^     ^   ^
@@ -65,33 +61,33 @@ int main(int argc, char** argv) {
 	/********************************************
 	 * check memory order of required variables *
 	 ********************************************/
-	check_memorder(&wrf, "T2", "SFC");
-	check_memorder(&wrf, "U10", "SFC");
-	check_memorder(&wrf, "V10", "SFC");
-	check_memorder(&wrf, "PSFC", "SFC");
-	check_memorder(&wrf, "SEAICE", "SFC");
-	if (wrf.varndims("HGT") == 2) check_memorder(&wrf, "HGT", "2D");
-	else check_memorder(&wrf, "HGT", "SFC");
-	check_memorder(&wrf, "TSK", "SFC");
-//	check_memorder(&wrf, "SNOW", "SFC");
-//	check_memorder(&wrf, "SNOWH", "SFC");
-	check_memorder(&wrf, "SST", "SFC");
-	check_memorder(&wrf, "PH", "BT_STAG");
-	check_memorder(&wrf, "PHB", "BT_STAG");
-	check_memorder(&wrf, "Q2", "SFC");
-	if (wrf.varndims("ISLTYP") == 2) check_memorder(&wrf, "ISLTYP", "2D");
-	else check_memorder(&wrf, "ISLTYP", "SFC");
-	check_memorder(&wrf, "W", "BT_STAG");
-	if (wrf.varndims("ZS") == 1) check_memorder(&wrf, "ZS", "1DZS");
-	else check_memorder(&wrf, "ZS", "ZS");
-	check_memorder(&wrf, "SMOIS", "SOILVAR");
-	check_memorder(&wrf, "TSLB", "SOILVAR");
-	check_memorder(&wrf, "U", "WE_STAG");
-	check_memorder(&wrf, "V", "NS_STAG");
-	check_memorder(&wrf, "T", "UNSTAG");
-	check_memorder(&wrf, "QVAPOR", "UNSTAG");
-	check_memorder(&wrf, "P", "UNSTAG");
-	check_memorder(&wrf, "PB", "UNSTAG");
+	wrf.check_memorder("T2", "SFC");
+	wrf.check_memorder("U10", "SFC");
+	wrf.check_memorder("V10", "SFC");
+	wrf.check_memorder("PSFC", "SFC");
+	wrf.check_memorder("SEAICE", "SFC");
+	if (wrf.varndims("HGT") == 2) wrf.check_memorder("HGT", "2D");
+	else wrf.check_memorder("HGT", "SFC");
+	wrf.check_memorder("TSK", "SFC");
+//	wrf.check_memorder("SNOW", "SFC");
+//	wrf.check_memorder("SNOWH", "SFC");
+	wrf.check_memorder("SST", "SFC");
+	wrf.check_memorder("PH", "BT_STAG");
+	wrf.check_memorder("PHB", "BT_STAG");
+	wrf.check_memorder("Q2", "SFC");
+	if (wrf.varndims("ISLTYP") == 2) wrf.check_memorder("ISLTYP", "2D");
+	else wrf.check_memorder("ISLTYP", "SFC");
+	wrf.check_memorder("W", "BT_STAG");
+	if (wrf.varndims("ZS") == 1) wrf.check_memorder("ZS", "1DZS");
+	else wrf.check_memorder("ZS", "ZS");
+	wrf.check_memorder("SMOIS", "SOILVAR");
+	wrf.check_memorder("TSLB", "SOILVAR");
+	wrf.check_memorder("U", "WE_STAG");
+	wrf.check_memorder("V", "NS_STAG");
+	wrf.check_memorder("T", "UNSTAG");
+	wrf.check_memorder("QVAPOR", "UNSTAG");
+	wrf.check_memorder("P", "UNSTAG");
+	wrf.check_memorder("PB", "UNSTAG");
 
 	/****************************************
 	 * load required dimension informations *
@@ -102,7 +98,6 @@ int main(int argc, char** argv) {
 	size_t n_weu = wrf.dimlen(wrf.dimid("west_east")); // length of staggered west east dimension
 	size_t n_sns = wrf.dimlen(wrf.dimid("south_north_stag")); // length of staggered south north dimension
 	size_t n_snu = wrf.dimlen(wrf.dimid("south_north")); // length of staggered south north dimension
-
 
 	/********************************
 	 * load projection informations *
@@ -215,10 +210,10 @@ int main(int argc, char** argv) {
 	seaice = wrf.vardataraw("SEAICE"); 	// SEAICE	proprtn	200100.
 	/*prepare count vector for extracting first 2D slice from a data
 	 * set, e.g. soilhgt is not changing with time... */
-	count2D[0] = nx;
 	count2D[1] = ny;
+	count2D[2] = nx;
 	if (wrf.varndims("HGT") == 2) soilhgt = wrf.vardataraw("HGT");	// SOILHGT	m		200100.
-	else soilhgt = wrf.vardata("HGT", dummy, dummy, start2D, count2D);
+	else soilhgt = wrf.vardata("HGT", &dummy, &dummy, start2D, count2D);
 	skintemp = wrf.vardataraw("TSK");	// SKINTMP	K		200100.
 //	snow = wrf.vardataraw("SNOW");		// SNOW		kg m-2	200100.
 //	snowh = wrf.vardataraw("SNOWH");	// SNOWH	m		200100.
@@ -248,7 +243,7 @@ int main(int argc, char** argv) {
 	/* load required variables */
 	q2 = wrf.vardataraw("Q2");
 	if (wrf.varndims("ISLTYP") == 2) isltyp = wrf.vardataraw("ISLTYP");
-	else isltyp = wrf.vardata("ISLTYP", dummy, dummy, start2D, count2D);
+	else isltyp = wrf.vardata("ISLTYP", &dummy, &dummy, start2D, count2D);
 	smois = wrf.vardataraw("SMOIS");
 	st = wrf.vardataraw("TSLB");
 

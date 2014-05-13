@@ -7,14 +7,12 @@
  * Description: This tool dumps/displays the content of an Intermediate Format File.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <string>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
-#include <fstream>
+#include "libutils.h"
+#include "libiff.h"
 #include "QuickPlot.h"
-#include "utils.h"
 
 using namespace std;
 
@@ -264,7 +262,11 @@ int main(int argc, char** argv) {
 		if (found) {
 			cout << "DATA(1,1) = " << data[0][0] << endl;
 			if (f_plot and level == xlvl) { /* plot if requested */
-				QuickPlot_rot(nx, ny, data_tmp, 0);
+#ifdef QUICKPLOT_H_
+	QuickPlot_rot(nx, ny, data_tmp, 0);
+#else
+	cout << "Plot option was not compiled!\n";
+#endif
 			}
 		}
 

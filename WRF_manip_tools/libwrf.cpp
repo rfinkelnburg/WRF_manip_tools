@@ -1,549 +1,20 @@
 /*
- * utils.cpp
+ * libwrf.cpp
  *
- *  Created on: Mar 17, 2014
+ *  Created on: Mai 13, 2014
  *      Author: Roman Finkelnburg
  *   Copyright: Roman Finkelnburg (2014)
- * Description: Utilities used by WRF_manip_tools.
+ * Description: NetCDF specific utilities used by WRF_manip_tools.
  */
 
-#include <iostream>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
+#include <iostream>
 #include <algorithm>
-#include "utils.h"
+#include "libutils.h"
+#include "libwrf.h"
 #include "QuickPlot.h"
-
-/* converts 4 Byte array into integer */
-int b2i(char b[4], bool endian) {
-	union {
-	        byte bytes[4];
-	        int i;
-	} un1;
-
-	if (endian) {
-		un1.bytes[0] = b[3];
-  		un1.bytes[1] = b[2];
-   		un1.bytes[2] = b[1];
-   		un1.bytes[3] = b[0];
-	} else {
-		un1.bytes[0] = b[0];
-  		un1.bytes[1] = b[1];
-   		un1.bytes[2] = b[2];
-   		un1.bytes[3] = b[3];
-	}
-	return un1.i;
-}
-
-/* converts integer into 4 Byte array */
-void i2b(int i, char b[4], bool endian) {
-	union {
-	        byte bytes[4];
-	        int i;
-	} un1;
-
-	un1.i = i;
-
-	if (endian) {
-		b[3] = char(un1.bytes[0]);
-		b[2] = char(un1.bytes[1]);
-		b[1] = char(un1.bytes[2]);
-		b[0] = char(un1.bytes[3]);
-	} else {
-		b[3] = char(un1.bytes[3]);
-		b[2] = char(un1.bytes[2]);
-		b[1] = char(un1.bytes[1]);
-		b[0] = char(un1.bytes[0]);
-	}
-}
-
-/* converts 4 Byte array into float */
-float b2f(char b[4], bool endian) {
-	union {
-	        char bytes[4];
-	        float f;
-	} un1;
-
-	if (endian) {
-		un1.bytes[0] = b[3];
-  		un1.bytes[1] = b[2];
-   		un1.bytes[2] = b[1];
-   		un1.bytes[3] = b[0];
-	} else {
-		un1.bytes[0] = b[0];
-  		un1.bytes[1] = b[1];
-   		un1.bytes[2] = b[2];
-   		un1.bytes[3] = b[3];
-	}
-	return un1.f;
-}
-
-/* converts float into 4 Byte array */
-void f2b(float f, char b[4], bool endian) {
-	union {
-	        byte bytes[4];
-	        float f;
-	} un1;
-
-	un1.f = f;
-
-	if (endian) {
-		b[3] = char(un1.bytes[0]);
-		b[2] = char(un1.bytes[1]);
-		b[1] = char(un1.bytes[2]);
-		b[0] = char(un1.bytes[3]);
-	} else {
-		b[3] = char(un1.bytes[3]);
-		b[2] = char(un1.bytes[2]);
-		b[1] = char(un1.bytes[1]);
-		b[0] = char(un1.bytes[0]);
-	}
-}
-
-/* allocates a 2D float array */
-float** allocate2D(int ncols, int nrows) {
-  int i;
-  float **dat2;
-  /*  allocate array of pointers  */
-  dat2 = (float**)malloc(ncols*sizeof(float*));
-
-  if(dat2==NULL) {
-    printf("\nError allocating memory\n");
-    exit(1);
-  }
-  /*  allocate each row  */
-  for(i = 0; i < ncols; i++) {
-    dat2[i] = (float*)malloc( nrows*sizeof(float));
-  }
-  if(dat2[i-1]==NULL) {
-    printf("\nError allocating memory\n");
-    exit(1);
-  }
-  return dat2;
-}
-
-/* copies char pointer cstr into char pointer str */
-void cp_string(char* str, long nstr, string cstr, long ncstr) {
-	if (ncstr > nstr) {
-		cout << "ABORT: Impcompatible string lengths " << str << " <-> " << cstr << endl;
-		exit(EXIT_FAILURE);
-	}
-	for (long i=0; i<ncstr; i++) str[i] = cstr[i];
-	for (long i=ncstr; i<nstr; i++) str[i] = '\0';
-}
-
-/* converts time char pointer to string time stamp */
-string time2str(void* ch, int n) {
-	string tstr;
-	if (!((char*)ch)[18+n*19]) {
-		printf("ERROR: Time stamp %i not available\n", n);
-		exit(1);
-	}
-	for (int i=0; i<19; i++) tstr += ((char*)ch)[i+n*19];
-    return tstr;
-}
-
-/***********************
- * IFF write proceture *
- ***********************/
-
-/* writes data set into Intermediate Format Files */
-int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFproj proj, int is_wind_grid_rel, float **data) {
-	char dummy[4];
-
-	/****************************
-	 * write header information *
-	 ****************************/
-	/* write header version number (4 Bytes) */
-	i2b(4, dummy, endian); ofile->write(dummy,4); // 4 Byte block start
-	i2b(header.version, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	i2b(4, dummy, endian); ofile->write(dummy,4); // 4 Byte block end
-
-	/* write header (156 Bytes) */
-	i2b(156, dummy, endian); ofile->write(dummy,4); // 156 Byte block start
-	ofile->write(header.hdate,24); // 24 Bytes
-	f2b(header.xfcst, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	ofile->write(header.map_source,32); // 32 Bytes
-	ofile->write(header.field,9); // 9 Bytes
-	ofile->write(header.units,25); // 25 Bytes
-	ofile->write(header.desc,46); // 46 Bytes
-	f2b(header.xlvl, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	i2b(proj.nx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	i2b(proj.ny, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	i2b(proj.iproj, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	i2b(156, dummy, endian); ofile->write(dummy,4); // 156 Byte block end
-
-	/* write projection */
-	switch (proj.iproj) {
-	case 0 : /* Cylindrical equidistant */
-		i2b(28, dummy, endian); ofile->write(dummy,4); // 28 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
-		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.deltalat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.deltalon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.earth_radius, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		i2b(28, dummy, endian); ofile->write(dummy,4); // 28 Byte block end
-		break;
-	case 1 : /* Mercator */
-		i2b(32, dummy, endian); ofile->write(dummy,4); // 32 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
-		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.dx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.dy, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.truelat1, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.earth_radius, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		i2b(28, dummy, endian); ofile->write(dummy,4); // 32 Byte block end
-		break;
-	case 3 : /* Lambert conformal */
-		i2b(40, dummy, endian); ofile->write(dummy,4); // 40 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
-		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.dx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.dy, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.xlonc, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.truelat1, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.truelat2, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.earth_radius, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		i2b(40, dummy, endian); ofile->write(dummy,4); // 40 Byte block end
-		break;
-	case 4 : /* Gaussian */
-		i2b(28, dummy, endian); ofile->write(dummy,4); // 28 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
-		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.nlats, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.deltalon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.earth_radius, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		i2b(28, dummy, endian); ofile->write(dummy,4); // 28 Byte block end
-		break;
-	case 5 : /* Polar stereographic */
-		i2b(36, dummy, endian); ofile->write(dummy,4); // 36 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
-		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.dx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.dy, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.xlonc, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.truelat1, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		f2b(proj.earth_radius, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		i2b(36, dummy, endian); ofile->write(dummy,4); // 36 Byte block end
-		break;
-	default:
-		std::cout << "Projection unknown!\n";
-		return EXIT_FAILURE;
-	}
-
-	/* write wind grid info */
-	i2b(4, dummy, endian); ofile->write(dummy,4); // 4 Byte block start
-	i2b(is_wind_grid_rel, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	i2b(4, dummy, endian); ofile->write(dummy,4); // 4 Byte block end
-
-	/* write data */
-	int cnt = proj.nx*proj.ny;
-	i2b(cnt, dummy, endian); ofile->write(dummy,4); // data block start
-	for (int j=0; j<proj.ny; j++) {
-		for (int i=0; i<proj.nx; i++) {
-			f2b(data[i][j], dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		}
-	}
-	i2b(cnt, dummy, endian); ofile->write(dummy,4); // data block end
-
-	return EXIT_SUCCESS;
-}
-
-/* writes a record into open IFF
- * INPUT:
- *  ofile		pointer to IFF
- *  proj		projection information
- *  mapsource	identifier of data origin
- *  version		IFF version
- *  xfcst		forcasting index
- *  xlvl		pressure level
- *  Time		WRF time variable
- *  t_idx		time step index
- *  p_idx		pressure level index
- *  n_plvl		number of pressure levels in value array
- *  field		variable name
- *  units		variable unit
- *  dec			variable description
- *  values		variable values
- */
-int write_IFF_record(ofstream *ofile, IFFproj proj, string mapsource,
-		int version, float xfcst, float xlvl, void *Time, long t_idx, long p_idx, long n_plvl,
-		string field, string units, string desc, void* values) {
-	bool endian = true;
-	int is_wind_grid_rel = 0;
-	float **data = allocate2D(proj.nx, proj.ny);
-
-	IFFheader header;
-	header.version = version;
-	header.xfcst = xfcst; /* forecast step */
-	header.xlvl = xlvl;
-	cp_string(header.map_source, 33, mapsource.c_str(), strlen(mapsource.c_str())); /* my identifier */
-	cp_string(header.hdate, 25, time2str(Time,t_idx).c_str(), strlen(time2str(Time,t_idx).c_str())); /* current time stamp */
-	cp_string(header.field, 10, field.c_str(), field.size());
-	cp_string(header.units, 26, units.c_str(), units.size());
-	cp_string(header.desc, 47, desc.c_str(), desc.size());
-
-	/* transform data for IFF writing */
-	for (long j=0; j<proj.ny; j++) // south_north dimension loop
-		for (long k=0; k<proj.nx; k++) // west_east dimension loop
-			data[k][j] = ((float *) values)[t_idx*(n_plvl*proj.ny*proj.nx)+p_idx*(proj.ny*proj.nx)+j*proj.nx+k];
-
-	/* write record to file */
-	if (write_IFF(ofile, endian, header, proj, is_wind_grid_rel, data)) {
-		cout << "ABORT: Problem writing " << header.hdate << ", " << header.field << ", " << header.xlvl << endl;
-		return EXIT_FAILURE;
-	}
-
-	return EXIT_SUCCESS;
-}
-
-/* Finds minimum value in float array
- * INPUT:
- * 	len	number of array elements
- * 	vec	float array
- * OUTPUT:
- * 	pos	index of minimum value in array
- */
-float min(size_t len, float *vec, size_t *pos) {
-	float val = vec[0];
-	*pos = 0;
-	for (size_t i=1; i<len; i++) {
-		if (vec[i] < val) {
-			val = vec[i];
-			*pos = i;
-		}
-	}
-	return val;
-}
-
-float min(size_t len, float *vec) {
-	size_t pos;
-	return min(len, vec, &pos);
-
-}
-
-/* Finds maximum value in float array
- * INPUT:
- * 	len	number of array elements
- * 	vec	float array
- * OUTPUT:
- * 	pos	index of maximum value in array
- */
-float max(size_t len, float *vec, size_t *pos) {
-	float val = vec[0];
-	*pos = 0;
-	for (size_t i=1; i<len; i++) {
-		if (vec[i] > val) {
-			val = vec[i];
-			*pos = i;
-		}
-	}
-	return val;
-}
-
-float max(size_t len, float *vec) {
-	size_t pos;
-	return min(len, vec, &pos);
-
-}
-
-/* Finds minimum and maximum value in float array
- * INPUT:
- * 	len	number of array elements
- * 	vec	float array
- * OUTPUT:
- * 	max		maximum value in array
- * 	minpos	index of maximum value in array
- * 	maxpos	index of maximum value in array
- */
-float minmax(size_t len, float *vec, float *maxval, size_t *minpos, size_t *maxpos) {
-	float minval = vec[0];
-	*maxval = vec[0];
-	*minpos = 0;
-	*maxpos = 0;
-	for (size_t i=1; i<len; i++) {
-		if (vec[i] < minval) {
-			minval = vec[i];
-			*minpos = i;
-		}
-		if (vec[i] > *maxval) {
-			*maxval = vec[i];
-			*maxpos = i;
-		}
-	}
-	return minval;
-}
-
-float minmax(size_t len, float *vec, float *maxval) {
-	size_t minpos, maxpos;
-	return minmax(len, vec, maxval, &minpos, &maxpos);
-
-}
-
-/* Interpolates between to float values.
- * val1		float value at index 1 (idx1)
- * val2 	float value at index 2 (idx2)
- * idx3		index of requested value
- */
-float interpol(float val1, float val2, float idx1, float idx2, float idx3) {
-	if (idx1 == idx2) {
-		return val1;
-	}
-
-	float m = ((val2-val1)/(idx2-idx1));
-	float n = val1 - (m*idx1);
-
-	return m*idx3+n;
-}
-
-/* Calculates relative humidity from WRF output.
- * INPUT:
- * 	qv	Water vapor mixing ratio [kg/kg]
- * 	p	Full pressure (perutrbation + base state pressure) [Pa]
- * 	t	Temperature [K]
- */
-double calc_rh(double qv, double p, double t) {
-	double SVP1 = 0.6112;
-	double SVP2 = 17.67;
-	double SVP3 = 29.65;
-	double SVPT0 = 273.15;
-
-	double R_D = 287.04;
-	double R_V = 461.6;
-	double EP_2 = R_D / R_V;
-
-	double EP_3 = 0.622;
-
-	double ES = 10.0 * SVP1 * exp(SVP2 * (t-SVPT0)/(t-SVP3));
-	double QVS = EP_3 * ES / (0.01 * p - ((1.0 - EP_3) * ES));
-
-	if (qv/QVS < 1.0 and qv/QVS > 0.0) return 100.0 * (qv/QVS);
-	if (qv/QVS < 0.0) return 0.0;
-	return 100.0;
-}
-
-float calc_rh(float qv, float p, float t) {
-	return float(calc_rh(double(qv), double(p), double(t)));
-}
-
-/* calculates temperature in K from WRF temperature */
-float calc_tk(float p, float theta) {
-	float P1000MB = 100000.0;
-	float R_D = 287.04;
-	float CP = 7.0 * R_D / 2.0;
-	float PI = pow((p / P1000MB),(R_D/CP));
-	return PI*theta;
-}
-
-/* checks if dimension order of variable is "correct" */
-void check_memorder(WRFncdf *w, string variable, string flag) {
-
-	/* check for ZS variable (2D)*/
-	if ((flag.compare(0,strlen("1DZS"),"1DZS") == 0) &&
-	   (w->varndims(variable) != 1 ||
-		w->vardims(variable)[0] != w->dimid("soil_layers_stag"))) {
-		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-		exit(EXIT_FAILURE);
-	}
-
-	/* check for ZS variable (2D)*/
-	if ((flag.compare(0,strlen("ZS"),"ZS") == 0) &&
-	   (w->varndims(variable) != 2 ||
-		w->vardims(variable)[0] != w->dimid("Time") ||
-		w->vardims(variable)[1] != w->dimid("soil_layers_stag"))) {
-		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-		exit(EXIT_FAILURE);
-	}
-
-	/* check for surface variable (2D)*/
-	if ((flag.compare(0,strlen("2D"),"2D") == 0) &&
-	   (w->varndims(variable) != 2 ||
-		w->vardims(variable)[0] != w->dimid("south_north") ||
-		w->vardims(variable)[1] != w->dimid("west_east"))) {
-		printf("SFC2D!\n");
-		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-		exit(EXIT_FAILURE);
-	}
-
-	/* check for surface variable (3D)*/
-	if ((flag.compare(0,strlen("SFC"),"SFC") == 0) &&
-	   (w->varndims(variable) != 3 ||
-		w->vardims(variable)[0] != w->dimid("Time") ||
-		w->vardims(variable)[1] != w->dimid("south_north") ||
-		w->vardims(variable)[2] != w->dimid("west_east"))) {
-		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-		exit(EXIT_FAILURE);
-	}
-
-	/* check for soil variable (4D)*/
-	if ((flag.compare(0,strlen("SOILVAR"),"SOILVAR") == 0) &&
-	   (w->varndims(variable) != 4 ||
-		w->vardims(variable)[0] != w->dimid("Time") ||
-		w->vardims(variable)[1] != w->dimid("soil_layers_stag") ||
-		w->vardims(variable)[2] != w->dimid("south_north") ||
-		w->vardims(variable)[3] != w->dimid("west_east"))) {
-		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-		for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-		exit(EXIT_FAILURE);
-	}
-
-	/* check for unstaggered variable (4D) */
-	if ((flag.compare(0,strlen("UNSTAG"),"UNSTAG") == 0) &&
-		   (w->varndims(variable) != 4 ||
-			w->vardims(variable)[0] != w->dimid("Time") ||
-			w->vardims(variable)[1] != w->dimid("bottom_top") ||
-			w->vardims(variable)[2] != w->dimid("south_north") ||
-			w->vardims(variable)[3] != w->dimid("west_east"))) {
-			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-			exit(EXIT_FAILURE);
-	}
-
-	/* check for bottom top staggered variable (4D) */
-	if ((flag.compare(0,strlen("BT_STAG"),"BT_STAG") == 0) &&
-		   (w->varndims(variable) != 4 ||
-			w->vardims(variable)[0] != w->dimid("Time") ||
-			w->vardims(variable)[1] != w->dimid("bottom_top_stag") ||
-			w->vardims(variable)[2] != w->dimid("south_north") ||
-			w->vardims(variable)[3] != w->dimid("west_east"))) {
-			printf("ABORT: Memory order of %s not compatible\n!", variable.c_str());
-			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-			exit(EXIT_FAILURE);
-	}
-
-	/* check for north south staggered variable (4D) */
-	if ((flag.compare(0,strlen("NS_STAG"),"NS_STAG") == 0) &&
-		   (w->varndims(variable) != 4 ||
-			w->vardims(variable)[0] != w->dimid("Time") ||
-			w->vardims(variable)[1] != w->dimid("bottom_top") ||
-			w->vardims(variable)[2] != w->dimid("south_north_stag") ||
-			w->vardims(variable)[3] != w->dimid("west_east"))) {
-			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-			exit(EXIT_FAILURE);
-	}
-
-	/* check for west east staggered variable (4D) */
-	if ((flag.compare(0,strlen("WE_STAG"),"WE_STAG") == 0) &&
-		   (w->varndims(variable) != 4 ||
-			w->vardims(variable)[0] != w->dimid("Time") ||
-			w->vardims(variable)[1] != w->dimid("bottom_top") ||
-			w->vardims(variable)[2] != w->dimid("south_north") ||
-			w->vardims(variable)[3] != w->dimid("west_east_stag"))) {
-			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
-			for (int i=0; i<w->varndims(variable); i++) printf("DIM %i: %s\n", i, w->vardimname(variable, i).c_str());
-			exit(EXIT_FAILURE);
-	}
-}
 
 /********************************************************************************
  *                           WRF netcdf file class                              *
@@ -1067,7 +538,8 @@ size_t WRFncdf::varcount(string vname) {
  * OUTPUT:	type	variable type identifier
  * 			dims	array of dimension length
  */
-void* WRFncdf::vardata(string vname,  int *type, int *ndims, size_t *start, size_t *stop) {
+void* WRFncdf::vardata(string vname, int *type, int *ndims, size_t *start, size_t *stop) {
+
 	void *data;
 
 	*type = this->vartype(vname);
@@ -1083,8 +555,7 @@ void* WRFncdf::vardata(string vname,  int *type, int *ndims, size_t *start, size
 
 	/* read data of selected variable */
 	if (this->inkind == NC_FORMAT_NETCDF4) {
-		this->stat = nc_get_vara(this->igrp, this->varid(vname), start, dims,
-				data);
+		this->stat = nc_get_vara(this->igrp, this->varid(vname), start, dims, data);
 		WRFCHECK(this->stat, nc_get_vara);
 	} else {
 		/* Unfortunately, above typeless copy not allowed for
@@ -1317,7 +788,11 @@ void WRFncdf::plotvardata(string vname) {
 	buf.v = this->vardata(vname, &vtype, &ndims, dimlens);
 
     //plot data
+#ifdef QUICKPLOT_H_
     QuickPlot(dimlens[0], dimlens[1], buf.v);
+#else
+	cout << "Plot option was not compiled!\n";
+#endif
 
     free(buf.v);
 }
@@ -1346,7 +821,11 @@ void WRFncdf::plotvardata(int step, string vname) {
 	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
 
     //plot data
+#ifdef QUICKPLOT_H_
 	QuickPlot(dimlens[1], dimlens[2], buf.v);
+#else
+	cout << "Plot option was not compiled!\n";
+#endif
 
 	//free used memory
 	free(buf.v);
@@ -1378,7 +857,11 @@ void WRFncdf::plotvardata(int step, int level, string vname) {
 	buf.v = this->vardata(vname, &vtype, &ndims, start, dimlens);
 
     //plot data
+#ifdef QUICKPLOT_H_
 	QuickPlot(dimlens[2], dimlens[3], buf.v);
+#else
+	cout << "Plot option was not compiled!\n";
+#endif
 
 	//free used memory
 	free(buf.v);
@@ -1583,4 +1066,109 @@ void WRFncdf::putdata(int varid, void *data) {
 
 	this->stat = nc_put_var(this->igrp, varid, data);
 	WRFCHECK(this->stat, nc_put_var);
+}
+
+/* checks if dimension order of variable is "correct" */
+void WRFncdf::check_memorder(string variable, string flag) {
+
+	/* check for ZS variable (2D)*/
+	if ((flag.compare(0,strlen("1DZS"),"1DZS") == 0) &&
+	   (this->varndims(variable) != 1 ||
+		this->vardims(variable)[0] != this->dimid("soil_layers_stag"))) {
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for ZS variable (2D)*/
+	if ((flag.compare(0,strlen("ZS"),"ZS") == 0) &&
+	   (this->varndims(variable) != 2 ||
+		this->vardims(variable)[0] != this->dimid("Time") ||
+		this->vardims(variable)[1] != this->dimid("soil_layers_stag"))) {
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for surface variable (2D)*/
+	if ((flag.compare(0,strlen("2D"),"2D") == 0) &&
+	   (this->varndims(variable) != 2 ||
+		this->vardims(variable)[0] != this->dimid("south_north") ||
+		this->vardims(variable)[1] != this->dimid("west_east"))) {
+		printf("SFC2D!\n");
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for surface variable (3D)*/
+	if ((flag.compare(0,strlen("SFC"),"SFC") == 0) &&
+	   (this->varndims(variable) != 3 ||
+		this->vardims(variable)[0] != this->dimid("Time") ||
+		this->vardims(variable)[1] != this->dimid("south_north") ||
+		this->vardims(variable)[2] != this->dimid("west_east"))) {
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for soil variable (4D)*/
+	if ((flag.compare(0,strlen("SOILVAR"),"SOILVAR") == 0) &&
+	   (this->varndims(variable) != 4 ||
+		this->vardims(variable)[0] != this->dimid("Time") ||
+		this->vardims(variable)[1] != this->dimid("soil_layers_stag") ||
+		this->vardims(variable)[2] != this->dimid("south_north") ||
+		this->vardims(variable)[3] != this->dimid("west_east"))) {
+		printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+		for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+		exit(EXIT_FAILURE);
+	}
+
+	/* check for unstaggered variable (4D) */
+	if ((flag.compare(0,strlen("UNSTAG"),"UNSTAG") == 0) &&
+		   (this->varndims(variable) != 4 ||
+			this->vardims(variable)[0] != this->dimid("Time") ||
+			this->vardims(variable)[1] != this->dimid("bottom_top") ||
+			this->vardims(variable)[2] != this->dimid("south_north") ||
+			this->vardims(variable)[3] != this->dimid("west_east"))) {
+			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+			for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+			exit(EXIT_FAILURE);
+	}
+
+	/* check for bottom top staggered variable (4D) */
+	if ((flag.compare(0,strlen("BT_STAG"),"BT_STAG") == 0) &&
+		   (this->varndims(variable) != 4 ||
+			this->vardims(variable)[0] != this->dimid("Time") ||
+			this->vardims(variable)[1] != this->dimid("bottom_top_stag") ||
+			this->vardims(variable)[2] != this->dimid("south_north") ||
+			this->vardims(variable)[3] != this->dimid("west_east"))) {
+			printf("ABORT: Memory order of %s not compatible\n!", variable.c_str());
+			for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+			exit(EXIT_FAILURE);
+	}
+
+	/* check for north south staggered variable (4D) */
+	if ((flag.compare(0,strlen("NS_STAG"),"NS_STAG") == 0) &&
+		   (this->varndims(variable) != 4 ||
+			this->vardims(variable)[0] != this->dimid("Time") ||
+			this->vardims(variable)[1] != this->dimid("bottom_top") ||
+			this->vardims(variable)[2] != this->dimid("south_north_stag") ||
+			this->vardims(variable)[3] != this->dimid("west_east"))) {
+			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+			for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+			exit(EXIT_FAILURE);
+	}
+
+	/* check for west east staggered variable (4D) */
+	if ((flag.compare(0,strlen("WE_STAG"),"WE_STAG") == 0) &&
+		   (this->varndims(variable) != 4 ||
+			this->vardims(variable)[0] != this->dimid("Time") ||
+			this->vardims(variable)[1] != this->dimid("bottom_top") ||
+			this->vardims(variable)[2] != this->dimid("south_north") ||
+			this->vardims(variable)[3] != this->dimid("west_east_stag"))) {
+			printf("ABORT: Memory order of %s not compatible!\n", variable.c_str());
+			for (int i=0; i<this->varndims(variable); i++) printf("DIM %i: %s\n", i, this->vardimname(variable, i).c_str());
+			exit(EXIT_FAILURE);
+	}
 }

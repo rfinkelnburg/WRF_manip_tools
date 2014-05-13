@@ -8,9 +8,9 @@
  *              for testing if I/O formatting is correct)
  */
 
-#include <string>
 #include <cstdlib>
-#include "utils.h"
+#include <cstdio>
+#include <libwrf.h>
 
 using namespace std;
 
