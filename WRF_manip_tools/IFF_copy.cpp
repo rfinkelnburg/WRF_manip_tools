@@ -64,7 +64,7 @@ int main(int argc, char** argv) {
 		if (ifile.eof()) { /* exit if EOF */
 			break;
 		}
-		ifile.read(dummy,4); header.version = b2i(dummy, endian);
+		ifile.read(dummy,4);header.version = b2i(dummy, endian);
 		ifile.read(dummy,4);
 
 		/* reading header information */

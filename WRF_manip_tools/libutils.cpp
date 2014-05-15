@@ -80,8 +80,8 @@ float b2f(char b[4], bool endian) {
 /* converts float into 4 Byte array */
 void f2b(float f, char b[4], bool endian) {
 	union {
-	        byte bytes[4];
-	        float f;
+			byte bytes[4];
+			float f;
 	} un1;
 
 	un1.f = f;

@@ -17,6 +17,13 @@
  * IFF write proceture *
  ***********************/
 
+void write_str(ofstream *ofile, char *str, int len) {
+	for (int i=0; i<len; i++) {
+		if (str[i] == '\0') str[i] = ' ';
+	}
+	ofile->write(str,len);
+}
+
 /* writes data set into Intermediate Format Files */
 int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFproj proj, int is_wind_grid_rel, float **data) {
 	char dummy[4];
@@ -26,17 +33,17 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 	 ****************************/
 	/* write header version number (4 Bytes) */
 	i2b(4, dummy, endian); ofile->write(dummy,4); // 4 Byte block start
-	i2b(header.version, dummy, endian); ofile->write(dummy,4); // 4 Bytes
+	i2b(header.version, dummy, endian);ofile->write(dummy,4); // 4 Bytes
 	i2b(4, dummy, endian); ofile->write(dummy,4); // 4 Byte block end
 
 	/* write header (156 Bytes) */
 	i2b(156, dummy, endian); ofile->write(dummy,4); // 156 Byte block start
-	ofile->write(header.hdate,24); // 24 Bytes
+	write_str(ofile, (char *)header.hdate,24); // 24 Bytes
 	f2b(header.xfcst, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-	ofile->write(header.map_source,32); // 32 Bytes
-	ofile->write(header.field,9); // 9 Bytes
-	ofile->write(header.units,25); // 25 Bytes
-	ofile->write(header.desc,46); // 46 Bytes
+	write_str(ofile, (char *)header.map_source,32); // 32 Bytes
+	write_str(ofile, (char *)header.field,9); // 9 Bytes
+	write_str(ofile, (char *)header.units,25); // 25 Bytes
+	write_str(ofile, (char *)header.desc,46); // 46 Bytes
 	f2b(header.xlvl, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 	i2b(proj.nx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 	i2b(proj.ny, dummy, endian); ofile->write(dummy,4); // 4 Bytes
@@ -47,7 +54,7 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 	switch (proj.iproj) {
 	case 0 : /* Cylindrical equidistant */
 		i2b(28, dummy, endian); ofile->write(dummy,4); // 28 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
+		write_str(ofile, (char *)proj.startloc,8); // 8 Bytes
 		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.deltalat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
@@ -57,18 +64,18 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 		break;
 	case 1 : /* Mercator */
 		i2b(32, dummy, endian); ofile->write(dummy,4); // 32 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
+		write_str(ofile, (char *)proj.startloc,8); // 8 Bytes
 		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.dx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.dy, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.truelat1, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.earth_radius, dummy, endian); ofile->write(dummy,4); // 4 Bytes
-		i2b(28, dummy, endian); ofile->write(dummy,4); // 32 Byte block end
+		i2b(32, dummy, endian); ofile->write(dummy,4); // 32 Byte block end
 		break;
 	case 3 : /* Lambert conformal */
 		i2b(40, dummy, endian); ofile->write(dummy,4); // 40 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
+		write_str(ofile, (char *)proj.startloc,8); // 8 Bytes
 		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.dx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
@@ -81,7 +88,7 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 		break;
 	case 4 : /* Gaussian */
 		i2b(28, dummy, endian); ofile->write(dummy,4); // 28 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
+		write_str(ofile, (char *)proj.startloc,8); // 8 Bytes
 		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.nlats, dummy, endian); ofile->write(dummy,4); // 4 Bytes
@@ -91,7 +98,7 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 		break;
 	case 5 : /* Polar stereographic */
 		i2b(36, dummy, endian); ofile->write(dummy,4); // 36 Byte block start
-		ofile->write(proj.startloc,8); // 8 Bytes
+		write_str(ofile, (char *)proj.startloc,8); // 8 Bytes
 		f2b(proj.startlat, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.startlon, dummy, endian); ofile->write(dummy,4); // 4 Bytes
 		f2b(proj.dx, dummy, endian); ofile->write(dummy,4); // 4 Bytes
@@ -112,7 +119,7 @@ int write_IFF(ofstream *ofile, bool endian, struct IFFheader header, struct IFFp
 	i2b(4, dummy, endian); ofile->write(dummy,4); // 4 Byte block end
 
 	/* write data */
-	int cnt = proj.nx*proj.ny;
+	int cnt = proj.nx*proj.ny*4;
 	i2b(cnt, dummy, endian); ofile->write(dummy,4); // data block start
 	for (int j=0; j<proj.ny; j++) {
 		for (int i=0; i<proj.nx; i++) {
