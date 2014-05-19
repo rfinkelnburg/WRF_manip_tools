@@ -175,6 +175,7 @@ void QuickPlot_rot(int nx, int ny, void *data, int ori) {
 	for (i=0; i<ni; i++)
 		for (j=0; j<nj; j++)
 			dat[i][j] = ((float*)data)[i*nj+j];
+
 	QuickPlot(ni, nj, dat);
 }
 
