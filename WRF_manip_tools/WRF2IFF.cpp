@@ -19,7 +19,7 @@ using namespace std;
 
 /* print help text */
 void print_help(void) {
-	puts("COMMAND: WRF2IFF <WRF file> <ouput directory>");
+	cout << "COMMAND: WRF2IFF <WRF file> <ouput directory>\n";
 }
 
 int main(int argc, char** argv) {

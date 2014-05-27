@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 	 * Checking/extracting arguments *
 	 *********************************/
 	if (argc != 3) {
-		puts("COMMAND: IFF_copy <input file> <output file>");
+		cout <<"COMMAND: IFF_copy <input file> <output file>\n";
 		return EXIT_FAILURE;
 	} else {
 		ifilename = string(argv[1]); /* extract input filename */

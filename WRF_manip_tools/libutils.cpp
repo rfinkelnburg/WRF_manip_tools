@@ -9,9 +9,45 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <math.h>
 #include "libutils.h"
+
+/* converts 2 Byte array into integer */
+short b2s(char b[2], bool endian) {
+	union {
+	        byte bytes[2];
+	        short i;
+	} un1;
+
+	if (endian) {
+   		un1.bytes[0] = b[1];
+   		un1.bytes[1] = b[0];
+	} else {
+		un1.bytes[0] = b[0];
+  		un1.bytes[1] = b[1];
+	}
+	return un1.i;
+}
+
+/* converts integer into 2 Byte array */
+void s2b(short i, char b[2], bool endian) {
+	union {
+	        byte bytes[2];
+	        short i;
+	} un1;
+
+	un1.i = i;
+
+	if (endian) {
+		b[0] = char(un1.bytes[1]);
+		b[1] = char(un1.bytes[0]);
+	} else {
+		b[0] = char(un1.bytes[0]);
+		b[1] = char(un1.bytes[1]);
+	}
+}
 
 /* converts 4 Byte array into integer */
 int b2i(char b[4], bool endian) {
@@ -56,47 +92,100 @@ void i2b(int i, char b[4], bool endian) {
 	}
 }
 
-/* converts 4 Byte array into float */
-float b2f(char b[4], bool endian) {
+/* converts Byte array into float */
+float b2f(char *b, bool endian, int n) {
 	union {
-	        char bytes[4];
-	        float f;
+		char b;
+	    char b2[2];
+	    char b4[4];
+	    float f;
 	} un1;
 
-	if (endian) {
-		un1.bytes[0] = b[3];
-  		un1.bytes[1] = b[2];
-   		un1.bytes[2] = b[1];
-   		un1.bytes[3] = b[0];
-	} else {
-		un1.bytes[0] = b[0];
-  		un1.bytes[1] = b[1];
-   		un1.bytes[2] = b[2];
-   		un1.bytes[3] = b[3];
+	switch (n) {
+		case 1:
+			un1.b = b[0];
+			break;
+		case 2:
+			if (endian) {
+				un1.b2[0] = b[1];
+		  		un1.b2[1] = b[0];
+			} else {
+				un1.b2[0] = b[0];
+		  		un1.b2[1] = b[1];
+			}
+			break;
+		case 4:
+			if (endian) {
+				un1.b4[0] = b[3];
+		  		un1.b4[1] = b[2];
+		   		un1.b4[2] = b[1];
+		   		un1.b4[3] = b[0];
+			} else {
+				un1.b4[0] = b[0];
+		  		un1.b4[1] = b[1];
+		   		un1.b4[2] = b[2];
+		   		un1.b4[3] = b[3];
+			}
+			break;
+		default:
+		    cout << "ERROR: Conversion of " << n << " Byte array to float not supported!\n";
+		    exit(1);
+			break;
 	}
 	return un1.f;
 }
 
-/* converts float into 4 Byte array */
-void f2b(float f, char b[4], bool endian) {
+float b2f(char b[4], bool endian) {
+	return b2f(b,endian,4);
+}
+
+/* converts float into Byte array */
+void f2b(float f, char *b, bool endian, int n) {
 	union {
-			byte bytes[4];
-			float f;
+		byte b;
+		byte b2[2];
+		byte b4[4];
+		float f;
 	} un1;
 
 	un1.f = f;
 
-	if (endian) {
-		b[3] = char(un1.bytes[0]);
-		b[2] = char(un1.bytes[1]);
-		b[1] = char(un1.bytes[2]);
-		b[0] = char(un1.bytes[3]);
-	} else {
-		b[3] = char(un1.bytes[3]);
-		b[2] = char(un1.bytes[2]);
-		b[1] = char(un1.bytes[1]);
-		b[0] = char(un1.bytes[0]);
+	switch (n) {
+		case 1:
+			b[0] = char(un1.b);
+			break;
+		case 2:
+			if (endian) {
+				b[1] = char(un1.b2[0]);
+				b[0] = char(un1.b2[1]);
+			} else {
+				b[1] = char(un1.b2[1]);
+				b[0] = char(un1.b2[0]);
+			}
+			break;
+		case 4:
+			if (endian) {
+				b[3] = char(un1.b4[0]);
+				b[2] = char(un1.b4[1]);
+				b[1] = char(un1.b4[2]);
+				b[0] = char(un1.b4[3]);
+			} else {
+				b[3] = char(un1.b4[3]);
+				b[2] = char(un1.b4[2]);
+				b[1] = char(un1.b4[1]);
+				b[0] = char(un1.b4[0]);
+			}
+			break;
+		default:
+		    cout << "ERROR: Float conversion to " << n << " Byte array not supported!\n";
+		    exit(1);
+			break;
 	}
+}
+
+/* converts float into 4 Byte array */
+void f2b(float f, char b[4], bool endian) {
+	f2b(f,b,endian,4);
 }
 
 /* allocates a 2D float array */
@@ -129,6 +218,20 @@ void cp_string(char* str, long nstr, string cstr, long ncstr) {
 	}
 	for (long i=0; i<ncstr; i++) str[i] = cstr[i];
 	for (long i=ncstr; i<nstr; i++) str[i] = '\0';
+}
+
+/* removes given character at begin and end of string */
+string edge_crop(string str, char c) {
+	int begin = -1;
+	int end = -1;
+	for (int i=0; i<str.length(); i++) {
+		if (str[i] != c and begin == -1) begin = i;
+	}
+	for (int i=str.length()-1; i>=0; i--) {
+		if (str[i] != c and end == -1) end = i+1;
+	}
+
+	return str.substr(begin, end-begin);
 }
 
 /* converts time char pointer to string time stamp */

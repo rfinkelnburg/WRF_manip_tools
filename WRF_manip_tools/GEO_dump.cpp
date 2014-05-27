@@ -20,7 +20,7 @@ using namespace std;
 
 void print_help(void) {
 	cout << "COMMAND: GEO_dump <file>\n";
-	puts("OPIONS:  --level=<level>	Plots data for this level.");
+	cout << "OPIONS:  --level=<level>	Plots data for this level.\n";
 }
 
 int main(int argc, char** argv) {
@@ -35,11 +35,11 @@ int main(int argc, char** argv) {
 		filename = string(argv[1]); /* extract filename */
 		if (argc == 3) {
 			if (string(argv[2]).compare(0,strlen("--level="),"--level=")) {
-				puts("Third argument unknown (should be --level=<level>)");
+				cout << "Second argument unknown (should be --level=<level>)\n";
 				print_help();
 				return EXIT_FAILURE;
 			} else {
-				/* pressure level to be plotted*/
+				/* level to be plotted*/
 				level = atoi(((string(argv[2])).substr(strlen("--level="),strlen(argv[2])-strlen("--level="))).c_str());
 			}
 		}

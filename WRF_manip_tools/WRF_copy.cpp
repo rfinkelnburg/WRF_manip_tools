@@ -10,6 +10,7 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <iostream>
 #include <libwrf.h>
 
 using namespace std;
@@ -21,7 +22,7 @@ int main(int argc, char** argv) {
 	 * Checking/extracting arguments *
 	 *********************************/
 	if (argc != 3) {
-		puts("COMMAND: WRF_copy <input file> <output file>");
+		cout << "COMMAND: WRF_copy <input file> <output file>\n";
 		return EXIT_FAILURE;
 	} else {
 		ifilename = string(argv[1]); /* extract input filename */

@@ -26,26 +26,41 @@ struct Geoheader {
 class Geogrid {
 	string d_name; //name of data file
 	string h_name; //name of index (header) file
-	ifstream h_file, d_file; //file handles
 	Geoheader header; //found header values
-	size_t n_elem; //number of elements
-	float *data; //loaded data converted to float
+	size_t n_elem; //number of elements in float array
+	float *data; //loaded data as floats
+	streampos size; //number of Bytes in data file
+	unsigned char *memblock; //loaded data as Bytes
+	bool newfile, header_loaded, data_loaded;
 
-	void Init (string); //Initialize Geofile object
+	void Init (string); //initializes Geofile object
+	void read_headerfile(void); //loads header from geogrid index file
+	void read_datafile(void); //loads data values form geogrid data file
+	void data2mem(void); //converts float to Byte data
 
   public:
 	/* constructor and destructor */
+	Geogrid (string, bool);
 	Geogrid (string);
    ~Geogrid (void); //close geogrid input file
 
    string getname(void); // returns current filename
    string getheadername(void); // returns current header file name
+   Geoheader *get_header(void); // returns header of current dataset
+   size_t get_nelem(void); // returns numer of elements in current dataset
+   float *get_data(void); // returns data of current dataset
 
    void dump(int); // dumps data of geogrid file
    void dump(void);
 
+   void set_header(Geoheader *); // set header values
+   void set_header(Geogrid *);
+   void set_data(float *, size_t); // set data values
+   void set_data(Geogrid *);
+   void output_header(ostream&); // outputs header information
+   void output_data(ostream&); // outputs data
+   void write_indexfile(); // writes index file
+   void write_datafile(); // writes data file
 };
-
-string edge_crop(string, char);
 
 #endif /* LIBGEO_H_ */

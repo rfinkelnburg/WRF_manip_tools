@@ -1,6 +1,6 @@
 CXXFLAGS =	-O2 -g -Wall -fmessage-length=0
 
-TARGET =	libutils libiff libwrf IFF_dump IFF_copy WRF_dump WRF_copy WRF2IFF GEO_dump
+TARGET =	libutils libiff libwrf IFF_dump IFF_copy WRF_dump WRF_copy WRF2IFF GEO_dump GEO_copy
 
 all:	$(TARGET)
 
@@ -36,4 +36,7 @@ WRF2IFF:
 
 GEO_dump:
 	$(CXX) -o GEO_dump GEO_dump.cpp -lgeo -Wl,-rpath,'/usr/local/lib'
+
+GEO_copy:
+	$(CXX) -o GEO_copy GEO_copy.cpp -lgeo -Wl,-rpath,'/usr/local/lib'
 	

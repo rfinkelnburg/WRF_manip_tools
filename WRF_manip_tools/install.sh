@@ -49,3 +49,6 @@ make WRF2IFF
 
 #install GEO_dump
 make GEO_dump
+
+#install GEO_copy
+make GEO_copy

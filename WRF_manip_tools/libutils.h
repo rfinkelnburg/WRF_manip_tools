@@ -26,14 +26,26 @@ union buf{
 	void *v;
 };
 
+/* converts 2 Byte array into short integer */
+short b2s(byte b[2], bool endian);
+
+/* converts short integer into 2 Byte array */
+void s2b(short i, byte b[2], bool endian);
+
 /* converts 4 Byte array into integer */
 int b2i(byte b[4], bool endian);
 
 /* converts integer into 4 Byte array */
 void i2b(int i, byte b[4], bool endian);
 
+/* converts Byte array into float */
+float b2f(byte *b, bool endian, int n);
+
 /* converts 4 Byte array into float */
 float b2f(byte b[4], bool endian);
+
+/* converts float into Byte array */
+void f2b(float f, byte *b, bool endian, int n);
 
 /* converts float into 4 Byte array */
 void f2b(float f, byte b[4], bool endian);
@@ -47,6 +59,15 @@ void printvardata(union buf*, size_t*, int, int, long, int);
 /* copies char pointer cstr into char pointer str */
 void cp_string(char* str, long nstr, string cstr, long ncstr);
 
+string edge_crop(string, char); // removes given character at begin and end of string
+
+/*
+ * Converts time char pointer to string time stamp.
+ * INPUT:
+ *  ch	char pointer to beginning of time stamp
+ *  n	number of time stamp element
+ */
+string time2str(void* ch, int n);
 
 
 /* Finds minimum value in float array
@@ -107,13 +128,5 @@ float calc_rh(float qv, float p, float t);
  *  		with the same dimension as p. Units must be [K].
  */
 float calc_tk(float p, float theta);
-
-/*
- * Converts time char pointer to string time stamp.
- * INPUT:
- *  ch	char pointer to beginning of time stamp
- *  n	number of time stamp element
- */
-string time2str(void* ch, int n);
 
 #endif /* LIBUTILS_H_ */
